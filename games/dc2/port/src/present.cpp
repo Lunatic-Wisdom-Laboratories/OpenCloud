@@ -11,6 +11,10 @@
 #include <string>
 #include <thread>
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 #include "camera_fixed.hpp"
 #include "exitcodes.hpp"
 #include "gfx/gfx.hpp"
@@ -96,9 +100,19 @@ gfx::DisplayListRef RecordHostOverlay(bool fps) {
         return nullptr;
     }
     if (fps) {
-        const int pixel = OverlayPixelSize(gfx::GetLogicalMapping(gfx::kMainTarget));
-        OverlayDrawText(PresentFpsText(), gfx::GetUiMapping(gfx::kMainTarget), pixel,
-                        pixel * kOverlayPadding, pixel * kOverlayPadding);
+        const int                 pixel = OverlayPixelSize(gfx::GetLogicalMapping(gfx::kMainTarget));
+        const gfx::LogicalMapping mapping = gfx::GetUiMapping(gfx::kMainTarget);
+        const std::string         text = PresentFpsText();
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+        // A phone's rounded corners cut off the top-left corner, so the counter sits at the top centre. Its font
+        // advances every character by kFpsFontAdvance font pixels; the backdrop adds kOverlayPadding each side.
+        constexpr int kFpsFontAdvance = 7;
+        const int     width = (static_cast<int>(text.size()) * kFpsFontAdvance + 2 * kOverlayPadding) * pixel;
+        const int     x = std::max(pixel * kOverlayPadding, (static_cast<int>(mapping.pixel_width) - width) / 2);
+#else
+        const int x = pixel * kOverlayPadding;
+#endif
+        OverlayDrawText(text, mapping, pixel, x, pixel * kOverlayPadding);
     }
     MenuMouseDraw();
     return gfx::EndRecording();
