@@ -44,6 +44,7 @@ RETAIL_BRIDGES = {
         ("ResetViewMode(CScene*)", "ResetViewMode", "PortRetailResetViewMode"),
         ("EditMoveChara(CScene*,sceVu0FVECTOR,EditMoveCharaInfo*)", "EditMoveChara", "PortRetailEditMoveChara"),
     ],
+    "fishing.cpp": [("sgLoopFishing(SubGameInfo*)", "sgLoopFishing", "PortRetailLoopFishing")],
     "editmap.cpp": [("CEditMap::ClearAllParts()", "ClearAllParts", "PortRetailClearAllParts")],
     "editmode.cpp": [("EditMode(CScene*)", "EditMode", "PortRetailEditMode")],
     "editloop.cpp": [
