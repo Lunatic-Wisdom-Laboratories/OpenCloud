@@ -94,6 +94,8 @@ jobs:
           # The split debug symbols would double the download; they are no part of the app.
           rm -rf "$RUNNER_TEMP/ipa/Payload/opencloud.app/opencloud.dSYM"
           cp -R "$build/glyphs" "$RUNNER_TEMP/ipa/Payload/opencloud.app/"
+          # The message fonts, which the game finds in fonts/ beside its executable.
+          cp -R "$build/fonts" "$RUNNER_TEMP/ipa/Payload/opencloud.app/"
           # The Luau scripts the events run, which the game finds in scripts/ beside its executable.
           cp -R "$build/scripts" "$RUNNER_TEMP/ipa/Payload/opencloud.app/"
           test -n "$(find "$RUNNER_TEMP/ipa/Payload/opencloud.app/scripts" -name '*.luau' | head -n1)"

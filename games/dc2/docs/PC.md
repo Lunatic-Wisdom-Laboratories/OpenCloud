@@ -4,7 +4,7 @@
 
 The port runs the retail main loop on the shared renderer and mixer, reading extracted PAL disc files. Supported checkpoints include the boot movies, title, costume selection, opening event, Palm Brinks exploration and the first Underground Channel floor. Town and dungeon movement, inventory item use, chapter resources, menus, photos and save/continue have native implementations and bounded replay fixtures. These checkpoints do not establish a complete campaign or every sub-game; the fish race still aborts at its unimplemented loop.
 
-The PC controls include keyboard menu navigation, mouse menus and item drag/drop, town, dungeon and Georama mouse camera control, optional wheel zoom, a PC settings page, JSON save files and Georama towns without a part limit. Sharp ASCII font rendering is an opt-in prototype, off by default. Presentation can interpolate between logic frames independently of the display rate. Ordinary boots leave debug controls disabled; `game.debug_mode=true` or `--jump` enables them explicitly.
+The PC controls include keyboard menu navigation, mouse menus and item drag/drop, town, dungeon and Georama mouse camera control, optional wheel zoom, a PC settings page, JSON save files and Georama towns without a part limit. The message font draws the game's own letters as outlines at any resolution. Presentation can interpolate between logic frames independently of the display rate. Ordinary boots leave debug controls disabled; `game.debug_mode=true` or `--jump` enables them explicitly.
 
 ## Building and running
 
@@ -1720,36 +1720,268 @@ When the controller speaker's device (see "Controller speaker") has four channel
 
 ### Font and headless
 
-#### Optional sharp text
+#### Message font
 
-`video.text_font` is `"original"` by default. In **Options → PC SETTINGS → Display**, set **Text font**
-to **Sharp**, or set `"sharp"` in the `config.json` beside the save folder. Put a trusted TrueType font at
-`<save>/lang/font.ttf` to try sharp ASCII dialogue and menu text. `lang/font.ttf` beside the
-executable is the fallback location. Restart after changing the font file; toggling Original/Sharp
-applies on the next drawn text without a restart.
-No font file is bundled by this feature. A missing or unusable font keeps the original text and reports
-the fallback once on stderr.
+`video.text_font` chooses how the game's text is drawn. `"sharp"`, the default, draws the letters as
+outlines from ChronicleTwoMessage, rasterized at the target's own resolution. `"original"` (**Options →
+PC SETTINGS → Display → Text font**) draws the retail font pages, 16x20-texel cells stretched to the
+screen. The setting applies to the next drawn text.
 
-This is an experimental painter for the existing text cells: glyph advances, line and page breaks,
-message reveal timing and controller behavior are unchanged. It does not use the font's kerning or
-advances to reposition text. Accented characters, Japanese, symbols, button icons, small-font mode,
-stylized sprite digits and pictures of text retain their original rendering. A different font can
-change the weight and appearance of letters even though their layout stays the same.
+ChronicleTwoMessage (`port/assets/fonts/ChronicleTwoMessage-Regular.ttf`, copied to `fonts/` beside
+the executable with Kosugi's Apache 2.0 licence and a notice of the changes) is made from Kosugi, the
+open release of a MOTOYA gothic. Measured against the retail pages, Kosugi matches their design far
+better than any other open font tried; the retail font is very likely a MOTOYA gothic itself (it
+draws ß as an upright β, as Japanese fonts do). The font is laid out on the retail cell grid: 64 units
+a texel, 1280 an em, the pen at the cell's left edge on row 16, half-width cells 512 units wide and
+full-width 1024. A cell maps onto it directly, with no fitting at run time.
 
-Glyphs are rasterized through OpenCloud at the target's UI scale, rounded up to eight-pixel em buckets.
-The prototype keeps immutable glyph images for the renderer's lifetime, so recorded frames never
-sample overwritten atlas cells. Its 16 MiB pixel-cache budget and 2048-entry limit fall back to retail
-for new glyph sizes when exhausted; restarting clears the cache. Very large sizes above a 512-pixel
-em also retain the original glyph. Font files are opt-in local inputs, not validated downloads.
+Every font cell the game draws, from `CFont::DrawChar`, its outlines and shadows and the event
+stopwatch, reaches `set2DSpriteEasyFont`, which `port/src/font.cpp` replaces. The cell's texture
+rectangle gives its font number; `FontPortCharacter` turns that into a character from the language's
+font table:
 
-`FontPortGpu.SharpDrawingKeepsRetailLayoutAndLineBreaks` exercises the original layout functions and
-the sharp painter with a font named by `DC2_TEST_FONT`. Without that fixture the raster/layout test
-is skipped; mapping, config and native submission tests do not require a font file.
+- French, German, Italian and Spanish (`fonttbl_2.bin`): ASCII, the 63 letters of
+  `alphabetical_chara_tbl` (font numbers 0x5E-0x9C) and the 24 symbols of `FontGaijiConvTbl`
+  (0x9D-0xB4). Their half-width middle dot is U+FF65.
+- English (`fonttbl_1.bin`): ASCII and 119 full-width symbols by Shift-JIS code. Where the European
+  page draws a character half-width, the English page's full-width form takes a private code:
+  “ U+E001, ” U+E002, ’ U+E004, ° U+E005.
+
+Kana, kanji, Japanese and the small font keep their bitmaps, as does a cell the font cannot draw.
+
+Drawn sharp, each half-width character takes its own width in the font. The original font sets every
+one in the same cell, 7 pixels apart at the usual size, which leaves an i or an l standing apart from
+its word; the font's letters are spaced as a type designer spaces them (see the build below), and
+`FontPortHalfAdvance` gives a character's advance over the cell's. Retail code still breaks lines and
+pages and reveals and times the text; only the pen moves:
+
+- Message windows: `ClsMes::MakeMesWin` (both overloads, `port/src/nd_meswin_kern.cpp`) wraps retail's
+  layout through the `PortRetailMakeMesWin` bridge. Each laid-out character then moves by how much the
+  half-width characters before it on its line widen or narrow: retail's half advance
+  (`font_w * half_font_w_percent`, or `font_w / 2` for a space) times the font's advance over the
+  cell's, less retail's. Each line's width moves by its whole shift, and the text width, the line
+  indents and the bubble are sized again from those widths as retail sized them. A space whose width
+  the text sets keeps it: the European text narrows its spaces with a width code at the start of a
+  line (0xF805, 0xF806). While retail lays out, `GetStrWidth` and `GetMesWidth_system` measure as retail
+  does, so the names and items it inserts move once.
+- A window's table holds whole pixels, so each window keeps its characters' pens beside it.
+  `ClsMes::DrawFont`, a copy of retail's, draws each glyph at the whole pixel left of its pen and
+  carries the rest to the painter (`FontPortPen`); button and digit pictures take the nearer pixel.
+- `GetStrWidth` and `GetMesWidth_system`, which menus measure names and items with, add each
+  half-width character's change. `CFont::DrawDirect` and `CalcDrawWH`, the menus' own text and PC
+  SETTINGS, advance by it; `CalcDrawWH` rounds up, so text stays inside the width it was measured at.
+- Figures and symbols keep the cell, so numbers still line up in columns. Full-width characters,
+  button pictures and the European page's font symbols advance as retail's do.
+
+The original font keeps retail's layout exactly.
+
+Retail's outlines and shadows (`set2DSprite_Fuchi`) are the glyph drawn again a pixel or two off, made
+for a CRT, which blurred those copies into one soft rim; drawn sharp, they are steps. `set2DSprite_Fuchi`
+is replaced, its retail body kept by a retail bridge (`PortRetailSet2DSpriteFuchi`), and the sharp font
+draws each outline style as one round rim instead, its distance from the glyph measured in logical
+pixels so it stays round where a logical pixel is not square (`port/src/font_outline.cpp`). Each rim
+lays down the ink retail's copies do, measured over a sample of glyphs at 8x: `FUCHI_OUTLINE`'s four
+copies a pixel out are a rim of 0.85 pixels and `FUCHI_OUTLINE_THICK`'s twelve one of 1.67, each with a
+half-pixel soft edge; `FUCHI_OUTLINE_WIDE`'s four faint copies two out are a glow fading to nothing at
+2.5 pixels, 0.312 of the text's alpha at the glyph. The shadows are copies of the glyph moved, already
+smooth, so retail still draws them, each copy through the sharp painter; `FUCHI_SHADOW_WHITE_BLUE`'s two
+blue copies a pixel and two up-left are drawn as one extrusion, with the quarter pixels between them.
+
+`FontPortPageOf` holds how each page draws the font. The European pages draw it as it is. The English
+page draws the same outlines 1.335 times taller and 0.955 times as wide, its pen 0.63 texels left and
+its baseline at row 17.31, which is why its stems look thinner. The painter rasterizes each glyph
+through OpenCloud's `ttffont::RenderGlyph` at the exact horizontal and vertical em the cell lands at in
+target pixels, its pen at a quarter pixel and its baseline on a whole pixel, and places the image on
+whole pixels, so nothing is resampled. Glyph images are immutable; past a 32 MiB budget the least
+recently drawn are destroyed, and a frame's list keeps any it still draws alive until it is done.
+
+The font is built by `scripts/font/build_message_font.py` from Kosugi 4.002 (fetched once at a pinned
+google/fonts revision and checked against its SHA-256) and the numbers in
+`scripts/font/message_font.json`; no game data is read, and the build is reproducible byte for byte.
+The numbers come from `scripts/font/fit_message_font.py <game-root>`, which measures Kosugi against the
+pages of the user's own extraction:
+
+- One affine maps Kosugi to the European page, and one more maps that to the English page.
+- Each ASCII glyph may be scaled about its centre (its stems offset back to their weight), moved,
+  slanted or weighted. A change is kept only when it improves both pages and is larger than noise, so
+  the retail font's hinting on one page does not leak into the design. 51 glyphs are corrected:
+  capitals a little wider, figures narrower, the apostrophe slanted, the tilde larger, among others.
+- Accented letters are a corrected base letter and one of Kosugi's marks. Each mark has one shape for
+  both cases and one place per case, so every acute is alike. ì í î ï use a dotless i; the diaeresis
+  is two of Kosugi's full stops; the cedilla is a stroke drawn for this font, since Kosugi has none.
+- ß is a stem and the bowls of Kosugi's 3, ¡ and ¿ the font's own ! and ? turned over, Æ æ Œ œ two
+  letters squeezed together, and the quotes single or paired marks.
+- Full-width symbols are fitted on both pages where both draw them; families (the figures, each pair
+  of arrows or brackets) share their shape.
+- A few letters take a change of design over the retail font (`design`): the top of the t comes down
+  to 598 units, and G is a texel wider to the right.
+- Letters and punctuation are spaced as HT Letterspacer spaces them (`spacing`): each side's white
+  within the letter's zone (the x-height, the cap height, or a mark's own ink), counting openings no
+  deeper than 48 units, is topped up to the sidebearing of a straight stem, 80 units. A space is 0.7
+  of a cell. Figures and symbols keep the half-width cell.
+
+Against the retail pages the font's mean per-texel coverage error is 0.039 for ASCII on either page,
+0.037 for the European page's other letters and 0.026 for full-width symbols; Kosugi as it comes
+starts at 0.053. What remains is mostly the retail hinting, which an outline font should not copy.
+The tools need `scripts/font/requirements.txt`.
+
+`FontOutline.RimsFadeOutAtTheirMeasuredReach`, `FontOutline.RimIsRoundInLogicalPixels` and
+`FontOutline.RimOfAnyRadiusAndItsDistances` cover the rims and the distance field the menu lettering's shadow
+fades over.
+`FontPort.MapsEveryPalFontPage` and `FontPort.PageGeometryIsTheFittedOne` cover the mapping and the
+English page's numbers against `message_font.json`; `FontPort.EveryMappedCharacterIsInTheShippedFont`
+renders every character the painter can ask for. `FontPort.SharpLettersTakeTheirOwnWidths` covers the
+advances in both modes, and `FontPort.MessageWindowsTakeTheLettersWidths` a window's characters, lines,
+bubble, figures and set-width spaces. `FontPortGpu.SharpDrawingKeepsRetailTablesAndDrawsEachStyle` checks
+that retail's table builder is unchanged in both modes, that the menus' measure takes the font's
+widths, that every outline style draws its shadow copies or its rim on whole pixels, and that a
+`FontPortPen` moves the glyph. `MessageFont.Check` runs `scripts/font/test_message_font.py`: the font's
+grid, its letters' widths and coverage, and, with Kosugi in `DC2_KOSUGI` or the cache, that the tools
+rebuild it byte for byte.
 
 For a repeatable visual comparison, use `--jump dungeon:0:1 --fast-load --input tools/input/font-dialogue.input
 --frames 1050 --screenshot caption.png --screenshot-display 1` with a fresh save folder for each setting.
 The floor menu is visible at frame 400 of the same script. Add `--window 1920x1080` or `--window 3840x2160`
 to compare presentation captures (`caption-display-0.png`) at those resolutions.
+
+#### Menu lettering
+
+The pause menu's words (Item, Character, Make, Move, Options, Help, ???) are painted into its atlas
+(`mnmain`), each in a 112x24-texel cell. With `video.text_font` sharp and English text, `MenuLabelDraw`
+(`port/src/menu_label.cpp`) draws them in ChronicleTwoMenu instead: the port's `PrimQuad<float>`
+(`port/src/menudraw_primquad.cpp`) asks it about every rectangle it draws, and a rectangle of the atlas that is
+one of the named cells (`mi_item_ic`, `mi_chr_ic`, `mi_invent_ic`, `mi_move_ic`, `mi_op_ic`, `mi_mn_ic`,
+`mi_hatena_ic`, looked up by name in the menu's layout) becomes its word. The font's em is its units over 64
+texels; each word's pen starts `start` texels into its cell on a baseline `baseline` rows down, moved by the
+word's own offset, all as `scripts/font/menu_font.json` has them. The word is lettered as the atlas paints it:
+lit grey (217) on a dark violet rim (29, 24, 34) a texel and a third wide (`FontOutlineRimOf`), with the rimmed
+letters again a texel and a half right and down as their shadow, its opacity falling to 75% as it leaves them
+(`FontOutlineDistance`); all set by eye in the game over the painting's rim of about a texel and a half and its
+shadow of a texel and a quarter across. It is composed into one image at the target's resolution and drawn as one quad, so the
+menu's colour, fades and its own shadow pass tint it as they tinted the cell. The other languages paint their
+words in faces of their own and keep their paintings for now, as does the original text font.
+
+The time board's lettering (menu0.cfg's `timeboard`: Day, Future, AM, PM, the colon and the figures of the day
+count and the clock) is drawn the same way in ChronicleTwoBoard, in the board's own style: lit grey (205) with no
+rim and a hard dark shadow (10) a texel right and down. Its words are named cells (`日目`, `未来`, `AM`, `PM`,
+`::`); its figures are cut one by one from the `時間数` strip by `DrawMenuNumber`, so the port's `PrimQuad<int>`
+hands each to `MenuLabelDrawFigure`, which recognises the strip's cell and draws that figure.
+
+ChronicleTwoMenu (`port/assets/fonts/ChronicleTwoMenu-Regular.ttf`, with both source fonts' SIL Open Font
+Licenses and a notice of the changes) is built by `scripts/font/build_menu_font.py` from Libre Franklin 3.000
+and Jost 3.710 (each fetched once at a pinned google/fonts revision and checked against its SHA-256) and the
+numbers in `scripts/font/menu_font.json`; no game data is read, and the build is reproducible byte for byte.
+Its units are the atlas's texels at 64 each. The numbers come from `scripts/font/fit_menu_font.py <game-root>`,
+which sets each word in its cell as the font would draw it and compares it texel by texel with how lit the
+user's own English atlas is between its rim and its fill:
+
+- Of 80 open fonts measured letter by letter, Libre Franklin at weight 500 came nearest. One affine takes it to
+  the atlas: 18.06 texels an em, 1.265 times as wide.
+- Each painted letter may be scaled across about its middle and up from the baseline (within 4%), slanted,
+  moved across, reweighted with its stems kept at their weight, and given its own advance. Letters keep the
+  shared baseline: the painting's per-letter steps up and down are its rasterization, which the font should not
+  copy. A correction that takes less than 2% of its words' error away is dropped.
+- Each word gets an offset of its own (under half a texel), since each was painted on its own; the label painter
+  places it there.
+- The M is Jost's, whose legs splay as the painting's do; of 26 fonts fitted for it, Jost at weight 500 came
+  nearest, a ninth closer than Libre Franklin's.
+- Every letter's outer corners are rounded (`rounding`, in each source's units: 40 for Libre Franklin, 70 for
+  Jost, whose M's points it blunts): the corner's sides are cut back and joined by a curve through it, so inner
+  corners stay sharp and no stroke loses weight.
+- The question mark is drawn: a hood, an elliptical arc whose left end hangs into a round drop, a stem sweeping
+  down from its right end, and a round dot, each dimension fitted to the painted ones (`QUESTION_KEYS`), then
+  given a little more arch at the same height.
+- Design over the fit (`warp`: the points inside a region scaled and sheared about a point): the r's hook comes
+  down 0.4 texel and reaches half a texel further, the t's tail reaches most of a texel further and turns up at
+  its end, and the M stands taller.
+- Flared stroke ends (`flare`, off) fit the painting no better than plain ones.
+
+The mean per-texel error against the painted words is 0.018, from 0.099 for Libre Franklin as it comes, before
+the design changes.
+
+ChronicleTwoBoard (`scripts/font/board_font.json`, same tools) is fitted the same way to the board's painted
+words and to each figure in its own cell. Its words are Yanone Kaffeesatz at weight 400, the nearest of 36
+condensed fonts measured; its figures, colon and y are Roboto Condensed's, but its 1 is Sawarabi Gothic's, its 4
+Fjalla One's, its 5 Antonio's and its 6 M+ 1p's, each the nearest fitted for it (the painted figures are a
+Japanese gothic's), drawn at its own size and width (`sources`), the 4 and 5 brought to the others' weight and
+height, and all slanted a little (a shear of 0.06, about 3.5°), the 1 and the 9 more, as the clock's are
+(`--keep shear`). Warps give the a a taller bowl
+and a shorter top, the P a bowl reaching lower down its stem, the 1 a shorter flag, the 5 a thicker top bar and a bowl
+thicker where it leaves the stem, and the 6 a straight, leaning stroke running into its bowl; a `clip` (a box the glyph is cut to) ends the y's tail short. The mean per-texel error is about 0.05, from 0.139 unfitted; the board's thin strokes leave
+more of each glyph at its edge than the words' do. `fit_menu_font.py --only` refits just the letters named.
+
+`FontPort.EveryTypefaceLoads`, `MenuLabel.GeometryIsTheFittedOne` and `MenuLabel.OnlyTheAtlasWordsAreLettered`
+cover the loading, the placement against both fonts' parameters and the cells lettered; `MenuFont.Check` runs
+`scripts/font/test_menu_font.py`: the fonts' characters, units, baselines, the M, the drawn question mark and the
+figures' heights, and, with the source fonts in `DC2_FONT_SOURCES` or the cache, that the tools rebuild both byte
+for byte. The pause menu is open
+at frame 365 of `--jump town:10 --fast-load --input tools/input/jump-town-menu-pcsettings.input`.
+
+#### Title lettering
+
+The language menu at boot and the title menu paint their buttons whole: a bronze-framed plate with its label in
+it, 208x52 texels in a 210x54 cell, in `title/lang_select.img` (the five languages, each named in itself) and in
+each language's `title%d.img` atlas (`moji`: New Game, Continue, Install, Options and Extras, the Free Race and
+Spheda practice buttons of the extras menu, and the Push START line). With `video.text_font` sharp,
+`TitleLetteringDraw` (`port/src/title_lettering.cpp`) draws them for every language: the port's
+`PrimQuad(mgCDrawPrim *, float, float, mgRect<int>)` (`port/src/menudraw_primquad.cpp`), which both menus draw
+through, asks it about each cell before writing the sprite. A button becomes a blank plate with its label lettered
+in ChronicleTwoTitle; Push START becomes its line lettered alone. The language menu runs inside `SCElogoFade`,
+before the game's own fonts, messages and gaiji are loaded, so the lettering draws from the TrueType face
+directly.
+
+The blank plate is cut at draw time from the user's own atlas, so no art ships. Every plate of an atlas has the
+same frame; the one whose label is shortest in all five languages (Extras on the title atlas, Italiano on the
+language atlas) holds no lettering left of column 64, from column 140, above row 12 or from row 36, and its
+middle is a flat fill. Its corners and edges are drawn as they are, and column 60 is stretched across the middle
+(`TitlePlatePieces`, nine pieces that also draw a plate of any other size, corners kept and edges stretched).
+The pieces cut the whole 210x54 cell, the empty texel round the plate included, so the plate's edge texels (the
+knob at its foot on the right) lie inside the sprite as retail draws them and filtering does not soften them.
+Outside its lettering, that blank matches every painted plate of all five languages to within 0.0003 of full
+scale. The Options cell starts a texel into its plate and takes a row of the Extras plate's rim below it; the
+blank plate is drawn where the painted plate lies, so its top rim is whole and the stray row is gone.
+
+The buttons were painted in ChronicleTwoMessage's own face, a little narrower, with wider round capitals.
+ChronicleTwoTitle (`scripts/font/title_font.json`) is ChronicleTwoMessage fitted to the English title atlas's
+seven buttons by the same tools as the menu's (`fit_menu_font.py`, its words `centred` in the plate): an em of 30.8
+texels, 0.716 as wide, and its C, O and N a quarter to a third wider, m 31% (its stems thickened back towards the n's) and w 50% wider,
+their stems kept at their weight, with smaller corrections to other letters. New Game's letters were then set by
+hand on the painting's own edges (w, G and m wider, the G, a and m apart as painted, each edge within a texel),
+and the N made 6% taller by eye; the fit lightened the strokes by about a pixel at 1080p, which is halved by eye,
+and the w's outer legs splay 40 units further out at the top, their tips 16 units thicker; the r and a set the
+next letter 28 and 48 units closer, the m is 23 units wider and as tall as the n, set
+apart from the a with the e after it spaced as after the u, and the n's arch peaks a little further left and
+leaves its stem at a gentler angle, by eye. The
+other languages' plates set the rest: their word spaces are narrower than English's, so the space is 1.25 texels
+narrower than the English fit (a texel tighter than English's, a texel wider than the others'); their descenders
+reach deeper, so the g, j, q and y reach two texels deeper, while the p's tail, by eye, ends a
+little short of ChronicleTwoMessage's; and v, b, B and z, which no English button has,
+are fitted to the French, Italian and Spanish plates. An accented letter with no corrections of its own takes its
+base letter's (an é is drawn as the e is). Against their own plates, with each word placed where it is painted,
+the mean per-texel error is 0.016 for English, 0.031 for French and Italian, 0.038 for Spanish and 0.061 for
+German: the other atlases were painted in other cuts (French and Italian bolder, Spanish narrower, German in
+another face), so one font matches English's best. The mean per-texel error over the plates' middles is 0.012, from 0.026 for
+ChronicleTwoMessage at its measured size. The font holds ASCII and every
+accented letter and mark ChronicleTwoMessage has; the source is the port's own font, pinned by its SHA-256, and
+the Apache License carries over. The labels are set as painted: ink centred half a texel left of the plate's
+middle, on the fitted baseline 33.7 texels below its top lowered by a pixel at 1080p, the language atlas's an eighth wider than the title
+atlas's; a label wider than 166 texels is narrowed to fit, as the longest paintings are. They are lit grey (217, 85% white, by eye)
+with a fine near-black (13) stroke half a texel wide, and, as the painting's dark lies mostly right of and below
+its strokes, that shape's shadow cast a texel and a half right and three quarters of one down, shading off to 65%
+as it leaves the letters. The labels' strings are in the port, in each language as its atlas
+paints it. Push START is a 13-texel cap, lit grey (217) with a texel's outline cast a texel right and down as
+well, centred where the painted lines are on the atlas's row 37. The draw's colour tints all of it, so the buttons' dark
+shadow pass, the greyed locked buttons and the fades look as they did. The original text font keeps the
+paintings.
+
+The lettering itself (`LetteringDraw`, `port/src/lettering.cpp`) is shared with the pause menu's: UTF-8 text in a
+typeface and style (fill, rim, shadow), rendered at the target's resolution into one cached image and laid on
+whole target pixels, from its pen or centred on its ink. `Lettering.ReadsUtf8`,
+`TitleLettering.EveryLabelIsInTheTitleFont`, `TitleLettering.PlatePiecesTileThePlate` and
+`TitleLettering.OnlyTheTitleCellsAreLettered` cover the decoding, the labels' characters and fit, the blank
+plate's pieces and the cells lettered; `MenuFont.Check` checks ChronicleTwoTitle's characters and wider capitals
+and that the tools rebuild it byte for byte. The language menu is on screen at frame 500 of a plain start; `--jump
+title` with START at frame 500 shows the title menu at frame 640.
 
 `mgInitFont` returns 0 and `mgCloseFont` does nothing. The port keeps no console, because retail never draws it: `font_draw_flag` is never set.
 
@@ -2008,7 +2240,7 @@ The 22 `#ifndef PORT` guards are 21 in the eight `.cpp` files that hold assembly
 
 `port/include/stubs/<unit>.hpp`, when it exists, is included ahead of `ps2/src/<unit>.cpp`, after `port.h` and nothing else. It declares what the port defines in place of code `PORT` leaves out, and it renames or supplies what the unit takes from MWCC or from the PS2 link alone. Only the port's build sees `port/include`.
 
-The 27 native unit headers are `charasetup`, `collision`, `dataread`, `dng_event`, `dng_main`, `dngfloor`, `dngmenu`, `editctrl`, `editmap2`, `editmenu`, `effect`, `event`, `event_func`, `gamepad`, `gameutil`, `inventmn`, `mainloop`, `menudraw`, `menumain`, `menuop`, `menusys`, `mg_frame`, `mg_math`, `mglib`, `nowload`, `photo`, `title`. `mg_dataset` declares the `CopyFrame` bridge. Their link-name bridges and native caller declarations remain outside retail source.
+The 27 native unit headers are `charasetup`, `collision`, `dataread`, `dng_event`, `dng_main`, `dngfloor`, `dngmenu`, `editctrl`, `editmap2`, `editmenu`, `effect`, `event`, `event_func`, `gamepad`, `gameutil`, `inventmn`, `mainloop`, `menudraw`, `menumain`, `menuop`, `menusys`, `mg_frame`, `mg_math`, `mglib`, `nowload`, `photo`, `title`. `mg_dataset` declares the `CopyFrame` bridge, and `font` the `set2DSprite_Fuchi` bridge. Their link-name bridges and native caller declarations remain outside retail source.
 
 ## Header fixups
 
@@ -2024,6 +2256,7 @@ MWCC accepts a `void Draw()` that hides the base's `int Draw()` and gives it a n
 - `editmenu.hpp`: `CMenuGeorama::place_no`, `place_name`, `placed_list` and `house_list` are pointers to the port's vectors, set to `NULL` by the constructor in place of its four `memset`s.
 - `dngmenu.hpp`: `CMenuTreeMap` declares `PortRetailStep` and `PortRetailDraw`, the retail bridges that the floor monster list's `Step` and `Draw` seams call (see "How `port/src` takes precedence").
 - `scenesnd.hpp`: `CScene` declares `PortRetailDeleteMap`, the retail bridge the map delete calls after it releases the event handles into the map (see "Event handles across a map change").
+- `nd_meswin.hpp`: `ClsMes` declares both `PortRetailMakeMesWin`, the retail bridges the message font's kerning wraps (see "Message font").
 - `nd_meswin.hpp`: `#ifndef MES_WINDOW_OUT_OF_LINE_INIT` becomes `#if 1`, so `ClsMes::Init` is inline in every unit. `dngmenu.cpp`'s out-of-line copy was a strong definition and collided with the COMDAT copies on COFF.
 - `collision.hpp`: `memset` takes `static_cast<void *>`, because `mgVu0FBOX` is not trivially copyable and `-Wnontrivial-memcall` rejects it.
 - `mapload.hpp`: `CFuncPoint` gets a memberwise copy assignment on its constructor's line. `InventData`'s `mgVu0FBOX` makes the union's implicit copy deleted under clang; MWCC generated it, and `CFuncPointMngr::GetLight` and `CMap::GetCharaLight` assign points with it. Retail's bodies then compile unchanged.

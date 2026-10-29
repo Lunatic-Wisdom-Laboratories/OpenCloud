@@ -147,7 +147,7 @@ jobs:
         run: cargo test --locked --manifest-path ../../engine/Cargo.toml
 
       - name: Package the macOS build
-        run: tar -czf artifacts/opencloud-dc2-macos-arm64.tar.gz -C port/build/macos-arm64-release opencloud scripts Luau-LICENSE.txt -C assets data.zip
+        run: tar -czf artifacts/opencloud-dc2-macos-arm64.tar.gz -C port/build/macos-arm64-release opencloud scripts fonts Luau-LICENSE.txt -C assets data.zip
 
       - name: Upload the macOS build
         uses: actions/upload-artifact@v7

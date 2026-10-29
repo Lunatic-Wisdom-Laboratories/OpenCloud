@@ -71,6 +71,11 @@ RETAIL_BRIDGES = {
         ("SetSpriteEnv(mgCDrawPrim*,int)", "SetSpriteEnv", "PortRetailSetSpriteEnv"),
     ],
     "menucls1.cpp": [("CDC2Mes::DrawMsg()", "DrawMsg", "PortRetailDrawMsg")],
+    "font.cpp": [("set2DSprite_Fuchi(mgCDrawPrim*,RECT,RECT,int,int)", "set2DSprite_Fuchi", "PortRetailSet2DSpriteFuchi")],
+    "nd_meswin.cpp": [
+        ("ClsMes::MakeMesWin(int)", "MakeMesWin", "PortRetailMakeMesWin"),
+        ("ClsMes::MakeMesWin(char*,int,int)", "MakeMesWin", "PortRetailMakeMesWin"),
+    ],
     "fishingobj.cpp": [("DrawFishingLine()", "DrawFishingLine", "PortRetailDrawFishingLine")],
     "actionchara.cpp": [
         ("CActionChara::DrawEffect()", "DrawEffect", "PortRetailDrawEffect"),
