@@ -6,6 +6,7 @@
 #include "common.h"
 
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,7 @@
 #include "log/log.hpp"
 #include "mainloop.hpp"
 #include "menuaqua.hpp"
+#include "menucommon.hpp"
 #include "platform/model_assets.hpp"
 #include "record_bridges.hpp"
 #include "stubs/menuaqua.hpp"
@@ -99,6 +101,24 @@ struct RaceClass {
 };
 
 /**
+ * Reads the name of a race fish in the single-byte form the game keeps item names in.
+ *
+ * The European documents spell accented letters as nine-byte "[UNI00f1]" codes, so names such as
+ * "Se[UNI00f1]or Mastic[UNI00f3]n" outgrow the 0x15-byte fish name. Retail copied them past the field
+ * and the port refused the whole document, leaving the race without fish. Item names are converted
+ * the same way when the item data loads.
+ */
+std::string RaceFishName(const native_config::Json &fish) {
+    std::string name = native_config::Text(fish, "name");
+    ConvertFontCode(name.data(), name.data());
+    name.resize(std::strlen(name.c_str()));
+    if (name.size() >= sizeof(BREEDFISH_USED::name)) {
+        throw std::runtime_error("name is longer than the game holds");
+    }
+    return name;
+}
+
+/**
  * Parses a race_fish document.
  */
 std::vector<RaceClass> ParseRaceFish(const native_config::Json &document) {
@@ -110,7 +130,7 @@ std::vector<RaceClass> ParseRaceFish(const native_config::Json &document) {
             throw std::runtime_error("race class or fish count out of range");
         }
         for (const auto &fish : Array(item, "fish")) {
-            race.fish.push_back({.id = Int(fish, "id"), .name = Text(fish, "name", sizeof(BREEDFISH_USED::name)), .kind = Int(fish, "kind"), .battle = Int(fish, "battle"), .boost = Int(fish, "boost"), .endurance = Int(fish, "endurance"), .tenacity = Int(fish, "tenacity"), .stamina = Int(fish, "stamina"), .size = Int(fish, "size")});
+            race.fish.push_back({.id = Int(fish, "id"), .name = RaceFishName(fish), .kind = Int(fish, "kind"), .battle = Int(fish, "battle"), .boost = Int(fish, "boost"), .endurance = Int(fish, "endurance"), .tenacity = Int(fish, "tenacity"), .stamina = Int(fish, "stamina"), .size = Int(fish, "size")});
         }
         classes.push_back(std::move(race));
     }
