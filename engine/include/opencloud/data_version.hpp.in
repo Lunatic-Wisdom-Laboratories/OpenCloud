@@ -1,0 +1,4 @@
+#pragma once
+
+// Generated from tools/opencloud/data_version.json by CMake.
+#define OPENCLOUD_DATA_VERSION @OC_DATA_VERSION@

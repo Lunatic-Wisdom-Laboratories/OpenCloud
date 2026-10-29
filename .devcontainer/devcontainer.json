@@ -1,0 +1,33 @@
+{
+	"name": "Dev",
+	"build": {
+		"context": "../engine/image",
+		"dockerfile": "../engine/image/Dockerfile"
+	},
+	"features": {
+		"ghcr.io/devcontainers/features/common-utils:2": {
+			"installZsh": true,
+			"installOhMyZsh": true,
+			"installOhMyZshConfig": true,
+			"configureZshAsDefaultShell": true,
+			"ohMyZshTheme": "devcontainers"
+		}
+	},
+	// The engine driver mounts the whole repository here; the game is at games/dc2.
+	"workspaceMount": "source=${localWorkspaceFolder},target=/work/chronicletwo,type=bind",
+	"workspaceFolder": "/work/chronicletwo/games/dc2",
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"terminal.integrated.defaultProfile.linux": "zsh"
+			},
+			"extensions": [
+				"llvm-vs-code-extensions.vscode-clangd",
+				"ms-python.black-formatter",
+				"cschlosser.doxdocgen",
+				"edwinhuish.better-comments-next",
+				"twxs.cmake"
+			]
+		}
+	}
+}

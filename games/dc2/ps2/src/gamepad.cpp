@@ -1,0 +1,832 @@
+#include "common.h"
+
+#include <eekernel.h>
+#include <libgraph.h>
+#include <libpad.h>
+
+#include <cstdio>
+
+#include "dataread.hpp"
+#include "gamepad.hpp"
+#include "mglib.hpp"
+
+/**
+ *
+ * VSync count at the preceding controller-thread update.
+ *
+ */
+static int old_vsync;
+
+/**
+ *
+ * Identifier of the controller thread.
+ *
+ */
+static int TheadID;
+
+/**
+ *
+ * First controller port's DMA buffer.
+ *
+ */
+static u8 pad_dma_buf[0x400] __attribute__((aligned(64)));
+
+/**
+ *
+ * Second controller port's DMA buffer.
+ *
+ */
+static u8 pad_dma_buf2[0x400] __attribute__((aligned(64)));
+
+/**
+ *
+ * Stack of the controller thread.
+ *
+ */
+static u8 ThreadStack[0x400] __attribute__((aligned(16)));
+
+/**
+ *
+ * Controller manager the controller thread steps.
+ *
+ */
+static CGamePad *GamePad;
+
+static int read_pad(PAD_STATUS *status, int port, int slot);
+
+void CGamePad::Init() {
+    key_lock = false;
+    key_lock2 = false;
+    vibration_enabled = true;
+    vibration_elapsed = 0;
+    capture_mode = PAD_CAPTURE_OFF;
+    capture_frame = 0;
+
+    while (sceGsSyncV(0) == 0) {
+    }
+
+    scePadInit(0);
+    unk_134 = 0;
+    unk_138 = 0;
+    unk_13C = 0;
+    unk_140 = 0;
+
+    for (int i = 0; i < 2; i++) {
+        pad[i].phase = PAD_PHASE_QUERY;
+        pad[i].button = 0;
+        pad[i].right_y = 0;
+        pad[i].right_x = 0;
+        pad[i].left_y = 0;
+        pad[i].left_x = 0;
+
+        for (int j = 0; j < 6; j++) {
+            pad[i].vibration[j] = 0;
+            pad[i].vibration_timer[i] = 0;
+        }
+
+        axis_threshold[i] = 0;
+        repeat[i].enabled = 0;
+        repeat[i].active = 0;
+
+        for (int j = 0; j < 32; j++) {
+            repeat[i].counter[j] = 0;
+            repeat[i].repeat_delay[j] = 0;
+            repeat[i].initial_delay[j] = 0;
+        }
+    }
+
+    if (!scePadPortOpen(0, 0, pad_dma_buf)) {
+        printf("ERROR: scePadPortOpen\n");
+        return;
+    }
+
+    sceGsSyncV(0);
+    sceGsSyncV(0);
+
+    if (!scePadPortOpen(1, 0, pad_dma_buf2)) {
+        printf("ERROR: scePadPortOpen\n");
+        return;
+    }
+
+    sceGsSyncV(0);
+    sceGsSyncV(0);
+}
+
+void CGamePad::Close() {
+    scePadPortClose(0, 0);
+    scePadPortClose(1, 0);
+    scePadEnd();
+}
+
+/**
+ *
+ * Reads one controller's buttons and sticks into its state and gives the
+ * controller type the data reports, or 0 when nothing was read.
+ *
+ */
+static int pad_button_read(PAD_STATUS *status, int port, int slot) {
+    u8  data[32];
+    int extended_id;
+    int button;
+
+    /**
+     *
+     * Last button word read from a connected controller.
+     *
+     */
+    static u16 rpad = 0;
+
+    extended_id = 0;
+
+    if (scePadRead(port, slot, data) == 0) {
+        return 0;
+    }
+
+    if (data[0] == 0) {
+        button = (data[2] << 8) | data[3];
+        button = button ^ 0xFFFF;
+        status->button = button & 0xFFFF;
+        status->right_x = data[4];
+        status->right_y = data[5];
+        status->left_x = data[6];
+        status->left_y = data[7];
+        rpad = button;
+        extended_id = data[1] >> 4;
+    }
+
+    return extended_id;
+}
+
+/**
+ *
+ * Advances one controller's setup and, once it is ready, reads it; gives
+ * nonzero when the controller's buttons and sticks were read.
+ *
+ */
+static int read_pad(PAD_STATUS *status, int port, int slot) {
+    int  valid;
+    int  terminal_id;
+    int *phase = &status->phase;
+    int *state = &status->state;
+    int *extended_id = &status->extended_id;
+    int *pad_mode = &status->pad_mode;
+    int *previous_pad_mode = &status->previous_pad_mode;
+
+    *state = scePadGetState(port, slot);
+
+    if (*state == scePadStateDiscon) {
+        *phase = PAD_PHASE_QUERY;
+    }
+
+    valid = false;
+
+    switch (*phase) {
+        case PAD_PHASE_QUERY:
+            if (*state == scePadStateStable || *state == scePadStateFindCTP1) {
+                terminal_id = scePadInfoMode(port, slot, InfoModeCurID, 0);
+
+                if (terminal_id != 0) {
+                    *extended_id = scePadInfoMode(port, slot, InfoModeCurExID, 0);
+
+                    if (*extended_id > 0) {
+                        terminal_id = *extended_id;
+                    }
+
+                    switch (terminal_id) {
+                        case PAD_TERMINAL_NEGCON:
+                            *phase = PAD_PHASE_READY;
+                            break;
+                        case PAD_TERMINAL_KONAMI_GUN:
+                            *phase = PAD_PHASE_READY;
+                            break;
+                        case PAD_TERMINAL_DIGITAL:
+                            *phase = PAD_PHASE_ANALOG_CHECK;
+                            break;
+                        case PAD_TERMINAL_ANALOG_JOYSTICK:
+                            *phase = PAD_PHASE_READY;
+                            break;
+                        case PAD_TERMINAL_NAMCO_GUN:
+                            *phase = PAD_PHASE_READY;
+                            break;
+                        case PAD_TERMINAL_DUALSHOCK:
+                            *phase = PAD_PHASE_ACTUATOR_CHECK;
+                            break;
+                        case PAD_TERMINAL_EX_TSURICON:
+                            *phase = PAD_PHASE_READY;
+                            break;
+                        case PAD_TERMINAL_EX_JOGCON:
+                            *phase = PAD_PHASE_READY;
+                            break;
+                        default:
+                            *phase = PAD_PHASE_READY;
+                            break;
+                    }
+                }
+            }
+
+            break;
+        case PAD_PHASE_ANALOG_CHECK:
+            if (scePadInfoMode(port, slot, InfoModeCurExID, 0) == 0) {
+                *phase = PAD_PHASE_READY;
+                break;
+            }
+
+            (*phase)++;
+
+        case PAD_PHASE_ANALOG_SET:
+            if (scePadSetMainMode(port, slot, 1, 3) == 1) {
+                (*phase)++;
+            }
+
+            break;
+        case PAD_PHASE_ANALOG_WAIT:
+            if (scePadGetState(port, slot) != scePadStateExecCmd) {
+                *phase = PAD_PHASE_QUERY;
+            }
+
+            break;
+        case PAD_PHASE_ACTUATOR_CHECK:
+            if (scePadInfoAct(port, slot, -1, 0) == 0) {
+                *phase = PAD_PHASE_READY;
+            }
+
+            status->actuator[0] = 0;
+            status->actuator[1] = 1;
+            status->actuator[2] = 0xFF;
+            status->actuator[3] = 0xFF;
+            status->actuator[4] = 0xFF;
+            status->actuator[5] = 0xFF;
+
+            if (scePadSetActAlign(port, slot, status->actuator) != 0) {
+                (*phase)++;
+            }
+
+            break;
+        case PAD_PHASE_ACTUATOR_WAIT:
+            if (scePadGetState(port, slot) != scePadStateExecCmd) {
+                *phase = PAD_PHASE_READY;
+            }
+
+            break;
+        default:
+            if (*state == scePadStateStable || *state == scePadStateFindCTP1) {
+                if ((*pad_mode = pad_button_read(status, port, slot)) != 0) {
+                    if (*previous_pad_mode != 0 && *pad_mode != *previous_pad_mode) {
+                        *previous_pad_mode = 0;
+                        *phase = PAD_PHASE_QUERY;
+                    } else {
+                        valid = true;
+                    }
+
+                    *previous_pad_mode = *pad_mode;
+                }
+            }
+
+            break;
+    }
+
+    if (!valid) {
+        status->button = 0;
+        status->left_y = PAD_ANALOG_CENTER;
+        status->left_x = PAD_ANALOG_CENTER;
+        status->right_y = PAD_ANALOG_CENTER;
+        status->right_x = PAD_ANALOG_CENTER;
+    }
+
+    if (*pad_mode == PAD_TERMINAL_DIGITAL) {
+        status->left_y = PAD_ANALOG_CENTER;
+        status->left_x = PAD_ANALOG_CENTER;
+        status->right_y = PAD_ANALOG_CENTER;
+        status->right_x = PAD_ANALOG_CENTER;
+    }
+
+    return valid;
+}
+
+void CGamePad::WaitEnable() {
+    sceGsSyncV(0);
+
+    while (!read_pad(&pad[0], 0, 0)) {
+        sceGsSyncV(0);
+
+        if (scePadGetState(0, 0) == scePadStateDiscon) {
+            break;
+        }
+    }
+
+    while (!read_pad(&pad[1], 1, 0)) {
+        sceGsSyncV(0);
+
+        if (scePadGetState(1, 0) == scePadStateDiscon) {
+            break;
+        }
+    }
+}
+
+int CGamePad::Connect() {
+    int state = scePadGetState(0, 0);
+
+    if (state == scePadStateStable) {
+        return true;
+    }
+
+    return state == scePadStateFindCTP1;
+}
+
+void CGamePad::UpDate() {
+    int i;
+    int j;
+
+    /**
+     *
+     * Alternating controller-update counter.
+     *
+     */
+    static int cnt = 0;
+
+    previous_pad[0] = pad[0];
+    read_pad(&pad[0], 0, 0);
+    previous_pad[1] = pad[1];
+    read_pad(&pad[1], 1, 0);
+
+    switch (capture_mode) {
+        case PAD_CAPTURE_RECORD:
+            Capture(&pad[0]);
+            break;
+        case PAD_CAPTURE_PLAY:
+            Play(&pad[0]);
+            break;
+    }
+
+    for (i = 0; i < 2; i++) {
+        int threshold = axis_threshold[i];
+
+        if (threshold < 0) {
+            threshold = 0;
+        }
+
+        if (threshold > 0) {
+            if (threshold < GetLX()) {
+                pad[i].button |= PAD_RIGHT;
+            }
+
+            if (GetLX() < -threshold) {
+                pad[i].button |= PAD_LEFT;
+            }
+
+            if (threshold < GetLY()) {
+                pad[i].button |= PAD_DOWN;
+            }
+
+            if (GetLY() < -threshold) {
+                pad[i].button |= PAD_UP;
+            }
+        }
+    }
+
+    for (j = 0; j < 2; j++) {
+        int         bit = 1;
+        PAD_REPEAT *auto_repeat = &repeat[j];
+
+        for (i = 0; i < 32; i++, bit <<= 1) {
+            if (auto_repeat->enabled & bit) {
+                if ((pad[j].button & auto_repeat->enabled) & bit) {
+                    auto_repeat->counter[i]++;
+
+                    if (auto_repeat->counter[i] >= auto_repeat->initial_delay[i]) {
+                        auto_repeat->active |= bit;
+                    }
+                } else {
+                    auto_repeat->counter[i] = 0;
+                    auto_repeat->active &= ~bit;
+                }
+
+                if (auto_repeat->counter[i] >= auto_repeat->repeat_delay[i] && (auto_repeat->active & bit)) {
+                    pad[j].button &= ~bit;
+                    auto_repeat->counter[i] = 0;
+                }
+            }
+        }
+    }
+
+    for (i = 0; i < 2; i++) {
+        if ((pad[i].button & PAD_UP) && (pad[i].button & PAD_DOWN)) {
+            pad[i].button &= ~(PAD_UP | PAD_DOWN);
+        }
+
+        if ((pad[i].button & PAD_RIGHT) && (pad[i].button & PAD_LEFT)) {
+            pad[i].button &= ~(PAD_RIGHT | PAD_LEFT);
+        }
+    }
+
+    if (key_lock2) {
+        pad[1].button = 0;
+        pad[1].right_x = PAD_ANALOG_CENTER;
+        pad[1].right_y = PAD_ANALOG_CENTER;
+        pad[1].left_x = PAD_ANALOG_CENTER;
+        pad[1].left_y = PAD_ANALOG_CENTER;
+        previous_pad[1].button = 0;
+        previous_pad[1].right_x = PAD_ANALOG_CENTER;
+        previous_pad[1].right_y = PAD_ANALOG_CENTER;
+        previous_pad[1].left_x = PAD_ANALOG_CENTER;
+        previous_pad[1].left_y = PAD_ANALOG_CENTER;
+    }
+
+    cnt = !cnt;
+    SwitchGamePadThread();
+}
+
+void CGamePad::Step(int elapsed) {
+    vibration_elapsed += elapsed;
+
+    if (vibration_elapsed > 1000) {
+        vibration_elapsed = 0;
+        StopVibration();
+        return;
+    }
+
+    for (int i = 0; i < 1; i++) {
+        if (!vibration_enabled) {
+            pad[i].vibration[PAD_MOTOR_SMALL] = 0;
+            pad[i].vibration[PAD_MOTOR_LARGE] = 0;
+        }
+
+        if (pad[i].vibration_timer[PAD_MOTOR_SMALL] > 0) {
+            pad[i].vibration_timer[PAD_MOTOR_SMALL] -= elapsed;
+        } else {
+            pad[i].vibration_timer[PAD_MOTOR_SMALL] = 0;
+            pad[i].vibration[PAD_MOTOR_SMALL] = 0;
+        }
+
+        if (pad[i].vibration_timer[PAD_MOTOR_LARGE] > 0) {
+            pad[i].vibration_timer[PAD_MOTOR_LARGE] -= elapsed;
+        } else {
+            pad[i].vibration_timer[PAD_MOTOR_LARGE] = 0;
+            pad[i].vibration[PAD_MOTOR_LARGE] = 0;
+        }
+    }
+
+    scePadSetActDirect(0, 0, pad[0].vibration);
+}
+
+/**
+ *
+ * Converts a raw stick position to a signed deflection from -128 to 128,
+ * with a dead zone around the centre.
+ *
+ */
+static int AxisCalibration(int axis) {
+    int calibrated = axis - PAD_ANALOG_CENTER;
+
+    if (calibrated < 50 && calibrated > -50) {
+        return 0;
+    }
+
+    if (calibrated > 0) {
+        return ((calibrated - 49) << 7) / 78;
+    }
+
+    return ((calibrated + 50) << 7) / 78;
+}
+
+int CGamePad::GetRX() {
+    return AxisCalibration(pad[0].right_x);
+}
+
+int CGamePad::GetRY() {
+    return AxisCalibration(pad[0].right_y);
+}
+
+int CGamePad::GetLX() {
+    return AxisCalibration(pad[0].left_x);
+}
+
+int CGamePad::GetLY() {
+    return AxisCalibration(pad[0].left_y);
+}
+
+int CGamePad::GetRX2() {
+    return AxisCalibration(pad[1].right_x);
+}
+
+void CGamePad::CancelAutoRepeat(int mask) {
+    int         i;
+    int         bit = 1;
+    PAD_REPEAT *auto_repeat = &repeat[0];
+
+    for (i = 0; i < 32; i++, bit <<= 1) {
+        if (mask & bit) {
+            auto_repeat->enabled &= ~bit;
+            auto_repeat->active &= ~bit;
+            auto_repeat->counter[i] = 0;
+            auto_repeat->initial_delay[i] = 0;
+            auto_repeat->repeat_delay[i] = 0;
+        }
+    }
+}
+
+void CGamePad::CancelAutoRepeat2(int mask) {
+    int         i;
+    int         bit = 1;
+    PAD_REPEAT *auto_repeat = &repeat[1];
+
+    for (i = 0; i < 32; i++, bit <<= 1) {
+        if (mask & bit) {
+            auto_repeat->enabled &= ~bit;
+            auto_repeat->active &= ~bit;
+            auto_repeat->counter[i] = 0;
+            auto_repeat->initial_delay[i] = 0;
+            auto_repeat->repeat_delay[i] = 0;
+        }
+    }
+}
+
+void CGamePad::SetAutoRepeat(int mask, int initial_delay, int repeat_delay) {
+    int i;
+    int bit = 1;
+
+    if (repeat_delay < 2) {
+        repeat_delay = 2;
+    }
+
+    if (initial_delay < 2) {
+        initial_delay = 2;
+    }
+
+    PAD_REPEAT *auto_repeat = &repeat[0];
+
+    for (i = 0; i < 32; i++, bit <<= 1) {
+        if (mask & bit) {
+            auto_repeat->enabled |= bit;
+            auto_repeat->active &= ~bit;
+            auto_repeat->counter[i] = 0;
+            auto_repeat->initial_delay[i] = initial_delay;
+            auto_repeat->repeat_delay[i] = repeat_delay;
+        }
+    }
+}
+
+void CGamePad::SetAutoRepeat2(int mask, int initial_delay, int repeat_delay) {
+    int i;
+    int bit = 1;
+
+    if (repeat_delay < 2) {
+        repeat_delay = 2;
+    }
+
+    if (initial_delay < 2) {
+        initial_delay = 2;
+    }
+
+    PAD_REPEAT *auto_repeat = &repeat[1];
+
+    for (i = 0; i < 32; i++, bit <<= 1) {
+        if (!(auto_repeat->enabled & bit) && (mask & bit)) {
+            auto_repeat->enabled |= bit;
+            auto_repeat->active &= ~bit;
+            auto_repeat->counter[i] = 0;
+            auto_repeat->initial_delay[i] = initial_delay;
+            auto_repeat->repeat_delay[i] = repeat_delay;
+        }
+    }
+}
+
+void CGamePad::KeyLock(int lock) {
+    key_lock = lock;
+}
+
+void CGamePad::KeyLock2(int lock) {
+    key_lock2 = lock;
+}
+
+void CGamePad::DebugKeyLock(int lock) {
+    debug_key_lock = lock;
+    KeyLock2(lock);
+}
+
+int CGamePad::GetPadOn() {
+    if (key_lock) {
+        return 0;
+    }
+
+    return pad[0].button;
+}
+
+int CGamePad::GetPadDown() {
+    if (key_lock) {
+        return 0;
+    }
+
+    return pad[0].button & ~previous_pad[0].button;
+}
+
+int CGamePad::GetPadUp() {
+    if (key_lock) {
+        return 0;
+    }
+
+    return ~pad[0].button & previous_pad[0].button;
+}
+
+float CGamePad::GetRXf() {
+    return GetRX() / 128.0f;
+}
+
+float CGamePad::GetRYf() {
+    return GetRY() / 128.0f;
+}
+
+float CGamePad::GetLXf() {
+    return GetLX() / 128.0f;
+}
+
+float CGamePad::GetLYf() {
+    return GetLY() / 128.0f;
+}
+
+float CGamePad::GetRXf2() {
+    return GetRX2() / 128.0f;
+}
+
+int CGamePad::On(int mask) {
+    if (key_lock) {
+        return false;
+    }
+
+    return (pad[0].button & mask) != 0;
+}
+
+int CGamePad::On2(int mask) {
+    if (key_lock) {
+        return false;
+    }
+
+    if (key_lock2) {
+        return false;
+    }
+
+    return (pad[1].button & mask) != 0;
+}
+
+int CGamePad::Down(int mask) {
+    if (key_lock) {
+        return false;
+    }
+
+    return (mask & (pad[0].button & ~previous_pad[0].button)) != 0;
+}
+
+int CGamePad::Down2(int mask) {
+    if (key_lock) {
+        return false;
+    }
+
+    if (key_lock2) {
+        return false;
+    }
+
+    return (mask & (pad[1].button & ~previous_pad[1].button)) != 0;
+}
+
+int CGamePad::Up(int mask) {
+    if (key_lock) {
+        return false;
+    }
+
+    return (mask & (~pad[0].button & previous_pad[0].button)) != 0;
+}
+
+void CGamePad::AutoRepeatOff() {
+    CancelAutoRepeat(-1);
+}
+
+void CGamePad::MenuModeOn(int threshold) {
+    axis_threshold[0] = threshold;
+}
+
+void CGamePad::MenuModeOff() {
+    axis_threshold[0] = 0;
+}
+
+void CGamePad::SetVibration(int motor, int strength, int duration) {
+    vibration_elapsed = 0;
+
+    if (!vibration_enabled || motor < PAD_MOTOR_SMALL || motor > PAD_MOTOR_LARGE || duration < 0) {
+        return;
+    }
+
+    pad[0].vibration_timer[motor] = duration;
+
+    // The small actuator is only on or off.
+    if (motor == PAD_MOTOR_SMALL) {
+        strength = strength != 0;
+    }
+
+    pad[0].vibration[motor] = strength;
+}
+
+void CGamePad::VibrationEnable(int enable) {
+    vibration_enabled = enable;
+}
+
+void CGamePad::StopVibration() {
+    SetVibration(PAD_MOTOR_SMALL, 0, 0);
+    SetVibration(PAD_MOTOR_LARGE, 0, 0);
+    Step(1);
+}
+
+void CGamePad::CaptureStart() {
+    capture_mode = PAD_CAPTURE_RECORD;
+    capture_frame = 0;
+}
+
+void CGamePad::CaptureEnd() {
+    capture_mode = PAD_CAPTURE_OFF;
+    capture_frame = 0;
+}
+
+void CGamePad::CapturePlay() {
+    capture_mode = PAD_CAPTURE_PLAY;
+}
+
+void CGamePad::Capture(PAD_STATUS *status) {
+    PAD_CAPTURE_FRAME *frame = PAD_CAPTURE_BUFFER;
+    u32                index = capture_frame;
+
+    if (index < PAD_CAPTURE_FRAME_MAX) {
+        frame += index;
+        frame->button = status->button;
+        frame->left_y = status->left_y;
+        frame->left_x = status->left_x;
+        frame->right_y = status->right_y;
+        frame->right_x = status->right_x;
+        capture_frame++;
+    }
+}
+
+void CGamePad::Play(PAD_STATUS *status) {
+    PAD_CAPTURE_FRAME *frame;
+    u32                index = capture_frame;
+
+    if (index < PAD_CAPTURE_FRAME_MAX) {
+        frame = PAD_CAPTURE_BUFFER;
+        frame += index;
+        status->button = frame->button;
+        status->left_y = frame->left_y;
+        status->left_x = frame->left_x;
+        status->right_y = frame->right_y;
+        status->right_x = frame->right_x;
+        capture_frame++;
+    }
+}
+
+void CGamePad::SaveCapture() {
+    WriteFile("host0:key_cap.bin", PAD_CAPTURE_BUFFER, capture_frame * sizeof(PAD_CAPTURE_FRAME));
+}
+
+void CGamePad::LoadCapture() {
+    SetCurrentDir("");
+    LoadFile2("key_cap.bin", PAD_CAPTURE_BUFFER, NULL, LOAD_FILE_READ);
+    SetCurrentDir(NULL);
+}
+
+void SwitchGamePadThread() {
+    RotateThreadReadyQueue(GAMEPAD_THREAD_PRIORITY);
+}
+
+/**
+ *
+ * Runs the controller thread: steps the controller manager's vibration by
+ * the vertical blanks elapsed since its last turn, then yields.
+ *
+ */
+static void GamePadStep(void *arg) {
+    while (true) {
+        int now = mgGetVSyncCount();
+        int elapsed = now - old_vsync;
+
+        if (elapsed < 0) {
+            elapsed = 1;
+        }
+
+        if (elapsed > 0 && GamePad != NULL) {
+            GamePad->Step(elapsed);
+        }
+
+        SwitchGamePadThread();
+        old_vsync = now;
+    }
+}
+
+void CreateGamePadThread(CGamePad *game_pad) {
+    ThreadParam param;
+    param.entry = GamePadStep;
+    param.option = 0;
+    param.stack = ThreadStack;
+    param.stackSize = sizeof(ThreadStack);
+    param.initPriority = GAMEPAD_THREAD_PRIORITY;
+    param.gpReg = &_gp;
+    TheadID = CreateThread(&param);
+    GamePad = game_pad;
+    StartThread(TheadID, NULL);
+}

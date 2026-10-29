@@ -1,0 +1,2 @@
+# Each game and the engine ignore their own build output; see their .gitignore files.
+.opencloud/

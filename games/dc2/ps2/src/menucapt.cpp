@@ -1,0 +1,277 @@
+#include "common.h"
+#include "mw_runtime.h"
+
+#include <cstdio>
+#include <cstring>
+
+#include "dataread.hpp"
+#include "font.hpp"
+#include "gamedata.hpp"
+#include "mainloop.hpp"
+#include "menucapt.hpp"
+#include "menucls1.hpp"
+#include "menucommon.hpp"
+#include "menudraw.hpp"
+#include "menumain.hpp"
+#include "menusys.hpp"
+#include "mg_drawprim.hpp"
+#include "mg_math.hpp"
+#include "mg_memory.hpp"
+#include "mg_tanime.hpp"
+#include "mg_texture.hpp"
+#include "mglib.hpp"
+#include "prespr.hpp"
+#include "savedata.hpp"
+#include "scenesnd.hpp"
+#include "scriptinterpreter.hpp"
+#include "snd_mngr.hpp"
+#include "sound.hpp"
+#include "sysmes.hpp"
+#include "userdata.hpp"
+
+/**
+ *
+ * Chapter title fade and display mode.
+ *
+ */
+static MenuChapterModeID MenuChapterMode;
+
+/**
+ *
+ * Chapter title texture blocks, display counter and logo opacity.
+ *
+ */
+static MENU_CHAPTER_INFO *MenuChapterInfo;
+
+/**
+ *
+ * Background texture for the chapter title.
+ *
+ */
+static mgCTexture *MenuChapterBG;
+
+/**
+ *
+ * Logo texture for the chapter title.
+ *
+ */
+static mgCTexture *MenuChapter_Logo;
+
+/**
+ *
+ * Loaded chapter sound bank ID.
+ *
+ */
+static u32 MenuChapterSnd_ID;
+
+/**
+ *
+ * Frame counter for chapter narration and sound playback.
+ *
+ */
+static int menu_snd_counter;
+
+/**
+ *
+ * Elapsed frames used to time out chapter narration.
+ *
+ */
+static int menu_chap_error_check_cnt;
+
+/**
+ *
+ * Memory stack reserved for chapter images, sound and display state.
+ *
+ */
+static mgCMemory MenuChapterStack;
+
+void MenuChapterInit(mgCMemory *stack, int *tex_block, int open_type, int chapter) {
+    static char *chap_voice[8] = {
+        "0060600.wav",
+        "2070310.wav",
+        "3060260.wav",
+        "4020120.wav",
+        "5000010.wav",
+        "6000360.wav",
+        "7000010.wav",
+        "8000140.wav",
+    };
+    char image_path[96];
+
+    union {
+        mgCMemory sound_memory;
+    };
+
+    char       voice_path[140];
+    u_int      file_size;
+    int        remaining = stack->stGetRest();
+    u_long128 *buffer = stack->stGetTop();
+    MenuChapterStack.stSetBuffer(buffer, remaining);
+    MenuChapterInfo = (MENU_CHAPTER_INFO *) MenuChapterStack.Alloc(2);
+    MenuChapterInfo->tex_block[0] = tex_block[0];
+    MenuChapterInfo->tex_block[1] = tex_block[1];
+    MenuChapterInfo->logo_alpha = 0.0f;
+    sprintf(image_path, "chap%d.img", chapter);
+    MenuChapterStack.Align64();
+    u_long128 *image_buffer = MenuChapterStack.stack + MenuChapterStack.stack_used;
+    file_size = LoadFileMenu(image_path, image_buffer, MENU_FILE_LOAD_DIRECT);
+
+    if ((int) file_size <= 0) {
+        file_size = LoadFileMenu("chap0.img", image_buffer, MENU_FILE_LOAD_DIRECT);
+    }
+
+    u_int blocks;
+
+    if (file_size & 0xF) {
+        blocks = (file_size >> 4) + 1;
+    } else {
+        blocks = file_size >> 4;
+    }
+
+    MenuChapterStack.Alloc(blocks);
+    mgTexManager.EnterIMGFile((unsigned char *) image_buffer, MenuChapterInfo->tex_block[0], 0, 0);
+    MenuChapterBG = mgTexManager.GetTexture("chapbg", -1);
+    MenuChapter_Logo = mgTexManager.GetTexture("chaplogo", -1);
+
+    sound_memory.Init();
+    sound_memory.stSetBuffer(MenuChapterStack.stack + MenuChapterStack.stack_used, 0x280);
+    MenuChapterStack.Alloc(0x280);
+    MenuChapterStack.Align64();
+    menu_snd_counter = 0;
+    unsigned int *sound_buffer = (unsigned int *) (MenuChapterStack.stack + MenuChapterStack.stack_used);
+    LoadFile2((char *) "snd2/sp/SP_007.snd", sound_buffer, (int *) &file_size, LOAD_FILE_READ);
+
+    if (file_size & 0xF) {
+        blocks = (file_size >> 4) + 1;
+    } else {
+        blocks = file_size >> 4;
+    }
+
+    MenuChapterStack.Alloc(blocks);
+    sndInitPort(SND_PORT_MENU);
+    MenuChapterSnd_ID = sndLoadSound(SND_PORT_MENU, sound_buffer, &sound_memory);
+    strcpy(voice_path, chap_voice[chapter]);
+    CSnd.StreamOpenFast(1, voice_path);
+
+    if (CSnd.StreamOpenState() != 0) {
+        while (CSnd.StreamOpenState() != 0) {
+        }
+    }
+
+    CSnd.StreamStandBy(1);
+
+    if (CSnd.StreamOpenState() != 0) {
+        while (CSnd.StreamOpenState() != 0) {
+        }
+    }
+
+    MenuChapterMode = MENU_CHAPTER_MODE_FADE_IN;
+    MenuMainScene->fade.FadeIn(30);
+}
+
+int MenuChapterKey() {
+    int         fade_done;
+    int         voice_state;
+    int         finished;
+    CFadeInOut *fade;
+
+    finished = false;
+
+    static u32 wait_cnt = 0;
+    static u32 voiceflag = false;
+
+    fade = &MenuMainScene->fade;
+    fade_done = fade->FadeCheck();
+
+    switch (MenuChapterMode) {
+        case MENU_CHAPTER_MODE_FADE_IN:
+            if (fade_done != 0) {
+                menu_snd_counter += 1;
+
+                if (menu_snd_counter == 2) {
+                    CSnd.StreamSetVol(1, 0x7FFF, 0x7FFF);
+                    CSnd.StreamPlay(1);
+                    wait_cnt = 0;
+                }
+
+                if (CalcMenuAdd(&MenuChapterInfo->logo_alpha, 3.0f, 128.0f) != 0) {
+                    MenuChapterMode = MENU_CHAPTER_MODE_SHOW;
+                    MenuChapterInfo->show_cnt = 0;
+                    menu_snd_counter = 0;
+                    menu_chap_error_check_cnt = 0;
+                    voiceflag = false;
+                }
+            }
+
+            break;
+        case MENU_CHAPTER_MODE_SHOW:
+            MenuChapterInfo->show_cnt += 1;
+            menu_chap_error_check_cnt += 1;
+            voice_state = CSnd.StreamGetState(1);
+
+            if (voice_state == SND_STREAM_STATE_END || menu_chap_error_check_cnt > 1500) {
+                voiceflag = true;
+            }
+
+            if ((voiceflag != 0) && (voice_state == 0)) {
+                if (menu_snd_counter == 0) {
+                    CSnd.StreamStop(1);
+                    CSnd.StreamClose(1);
+                }
+
+                menu_snd_counter += 1;
+            }
+
+            if (menu_snd_counter == 36) {
+                sndSePlay(MenuChapterSnd_ID, 0, 0);
+            }
+
+            if ((MenuChapterInfo->show_cnt > 300) &&
+                (menu_snd_counter >= 346)) {
+                MenuMainScene->fade.FadeOut(60, 0.0f, 0.0f, 0.0f);
+                MenuChapterMode = MENU_CHAPTER_MODE_FADE_OUT;
+            }
+
+            break;
+        case MENU_CHAPTER_MODE_FADE_OUT:
+            if (fade_done != 0) {
+                finished = true;
+            }
+
+            break;
+    }
+
+    return finished;
+}
+
+void MenuChapterDraw() {
+    mgTexManager.ReloadTexture(MenuChapterInfo->tex_block[0], (sceVif1Packet *) NULL);
+    DrawMenuFillBox(128, 0, 0, 0);
+    mgCDrawPrim prim;
+    mgRect<int> screen;
+    mgRect<int> source;
+    prim.offset_x = 0;
+    prim.offset_y = 0;
+    SetSpriteEnv(&prim, MENU_SPRITE_ENV_TEXTURE);
+    prim.Begin(MG_PRIM_SPRITE);
+
+    if (MenuChapterBG != NULL) {
+        prim.Texture(MenuChapterBG);
+        prim.Color(128, 128, 128, 128);
+        source.Set(0, 0, 512, 448);
+        screen.Set(0, 0, 512, mgScreenHeight);
+        PrimQuad(&prim, screen, source);
+    }
+
+    if (MenuChapter_Logo != NULL) {
+        prim.Texture(MenuChapter_Logo);
+        prim.Color(128, 128, 128, fptosi(MenuChapterInfo->logo_alpha));
+        mgRect<int> title(0, 0, 512, 64);
+        PrimQuad(&prim, 0.0f, mgScreenHeight / 2.0f - 32.0f - 12.0f, title);
+        prim.Color(128, 128, 128, 128);
+        mgRect<int> overlay(0, 64, 512, 64);
+        PrimQuad(&prim, 0.0f, 0.0f, overlay);
+    }
+
+    prim.End();
+}
