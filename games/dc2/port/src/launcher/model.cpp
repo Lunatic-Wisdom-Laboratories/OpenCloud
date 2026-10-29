@@ -390,7 +390,8 @@ std::vector<Setting> Settings() {
         for (int row = 0; std::cmp_less(row, pages[page].rows.size()); ++row) {
             const options::Row &entry = pages[page].rows[row];
             // Bindings wait for a key in the game, and the resolutions are listed once the game's window is up.
-            if (!entry.step || !entry.action.empty() || entry.key == "video.width") {
+            // The touch gamepad's editor opens over the game, so its row stays there.
+            if (!entry.step || !entry.action.empty() || entry.key == "video.width" || entry.key == "input.touch_controls") {
                 continue;
             }
             const std::string value = entry.value ? entry.value(config) : "";

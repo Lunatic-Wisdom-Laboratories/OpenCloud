@@ -287,6 +287,19 @@ void TakeFromOthers(Config &config, std::string_view action, const std::vector<s
     }
 }
 
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+extern "C" void IosTouchEditorOpen();
+#endif
+
+// APP SETTINGS' row that opens the touch gamepad's editor (port/src/ios) over the game.
+Row TouchControls() {
+    return {.key = "input.touch_controls", .label = "Touch controls", .help = "Left or Right opens the editor: drag a control to move it,\npinch to resize it. Layouts are saved by name.", .value = [](const Config &) { return std::string("Edit"); }, .step = [](Config &, int) {
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+        IosTouchEditorOpen();
+#endif
+    }};
+}
+
 // The rows kAppPage leaves out.
 bool PcOnly(std::string_view key) {
     static constexpr std::string_view keys[] = {
@@ -366,6 +379,7 @@ std::vector<Page> MakePages() {
         for (Page &page : pages) {
             std::erase_if(page.rows, [](const Row &row) { return PcOnly(row.key); });
         }
+        pages[2].rows.insert(pages[2].rows.begin(), TouchControls());
     }
     return pages;
 }

@@ -353,7 +353,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set(CMAKE_Swift_LANGUAGE_VERSION 5)
     enable_language(Swift)
     add_library(ct_ios_swift STATIC ${PORT_DIR}/ios/Launcher.swift ${PORT_DIR}/ios/LauncherLibrary.swift
-        ${PORT_DIR}/ios/TouchOverlay.swift ${PORT_DIR}/ios/Haptics.swift)
+        ${PORT_DIR}/ios/TouchOverlay.swift ${PORT_DIR}/ios/TouchLayout.swift ${PORT_DIR}/ios/TouchLayoutEditor.swift
+        ${PORT_DIR}/ios/Haptics.swift)
     target_compile_options(ct_ios_swift PRIVATE -cxx-interoperability-mode=default "SHELL:-Xcc -std=c++20"
         "SHELL:-I ${PORT_DIR}/ios")
     target_link_libraries(opencloud PRIVATE ct_ios_swift)
