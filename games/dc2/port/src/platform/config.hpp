@@ -50,6 +50,8 @@ struct Config : HostSettings {
     bool quick_loadout_plate = false;
     // game.skip_intro: boots past the Sony Computer Entertainment text, the copyright notice and the Level-5 logo.
     bool skip_intro = false;
+    // game.start_skips_cutscenes: Start skips a skippable cutscene instead of opening the pause screen.
+    bool start_skips_cutscenes = false;
     // game.sprint: holding R2 while walking in a town or on a dungeon floor sprints; a tap still enters first person.
     bool sprint = false;
     // game.auto_use_event_item: an event that asks for one item the bag holds is handed it without the item picker.

@@ -40,6 +40,7 @@ def load_port_override(path: Path):
 # Preserve these retail routines under native link-name bridges. Only their names
 # change; all calls in the original unit still reach the native public seam.
 RETAIL_BRIDGES = {
+    "nowload.cpp": [("PauseStart(PAUSE_INFO*)", "PauseStart", "PortRetailPauseStart")],
     "editctrl.cpp": [
         ("ResetViewMode(CScene*)", "ResetViewMode", "PortRetailResetViewMode"),
         ("EditMoveChara(CScene*,sceVu0FVECTOR,EditMoveCharaInfo*)", "EditMoveChara", "PortRetailEditMoveChara"),

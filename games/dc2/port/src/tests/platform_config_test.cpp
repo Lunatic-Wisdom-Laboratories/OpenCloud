@@ -229,6 +229,16 @@ TEST_F(PlatformConfig, SkipIntroDefaultsToOffAndRoundTrips) {
     ASSERT_TRUE(parsed == config);
 }
 
+TEST_F(PlatformConfig, StartSkipsCutscenesDefaultsToOffAndRoundTrips) {
+    ASSERT_FALSE(Config{}.start_skips_cutscenes);
+    ASSERT_FALSE(ConfigParse(R"({"game": {"start_skips_cutscenes": 1}})").start_skips_cutscenes);
+    Config config;
+    config.start_skips_cutscenes = true;
+    const Config parsed = ConfigParse(ConfigSerialize(config));
+    ASSERT_TRUE(parsed.start_skips_cutscenes);
+    ASSERT_TRUE(parsed == config);
+}
+
 TEST_F(PlatformConfig, AutoUseEventItemDefaultsToOffAndRoundTrips) {
     ASSERT_FALSE(Config{}.auto_use_event_item);
     ASSERT_FALSE(ConfigParse(R"({"game": {"auto_use_event_item": 1}})").auto_use_event_item);

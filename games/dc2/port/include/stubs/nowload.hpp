@@ -7,3 +7,6 @@ extern float          ProgBarWidthStep asm("NowLoad_ProgBarWidthStep");
 
 // game.skip_intro, which SCElogoFade's fade loop checks.
 bool PortSkipIntro();
+
+struct PAUSE_INFO;
+int PortRetailPauseStart(PAUSE_INFO *) asm("NowLoad_PauseStart");

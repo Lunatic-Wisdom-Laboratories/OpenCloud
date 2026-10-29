@@ -690,6 +690,7 @@ Writes are atomic: the file is written as `config.json.tmp` and renamed over `co
 | `game.autosave` | bool | true | | write the autosave on arriving in a town or on a dungeon floor |
 | `game.quick_loadout_title` | string | bar | bar, plate | the quick loadout panel's title on a bar, or on a plate like the EXP gauge's; see [QUICK_LOADOUT.md](QUICK_LOADOUT.md) |
 | `game.auto_use_event_item` | bool | false | | an event that asks for one item the bag holds is handed it without the item picker; see "Auto-use event items" |
+| `game.start_skips_cutscenes` | bool | false | | `true`: Start skips a skippable cutscene at once (**Start skips cutscenes** in Game); `false` keeps the pause screen, where Triangle skips |
 | `game.skip_intro` | bool | false | | boot past the Sony Computer Entertainment text, the copyright notice and the Level-5 logo to the title screen |
 | `game.sprint` | bool | false | | holding R2 while walking in a town or on a dungeon floor sprints; a tap still enters the first-person view; see "Sprint" |
 | `game.floor_info_monsters` | bool | false | | Triangle on a dungeon floor's information lists its monsters (spoilers); see "Floor monster list" |

@@ -79,6 +79,12 @@ class RetailBridgeTests(unittest.TestCase):
         self.assertEqual(mirror.count("int PortRetailLoopFishing(SubGameInfo *info) {"), 1)
         self.assertNotIn("int sgLoopFishing(", mirror)
 
+    def test_pause_start_keeps_retail_body_under_its_bridge(self):
+        source = Path(__file__).resolve().parents[2] / "ps2/src/nowload.cpp"
+        mirror = unit_copy.retail_bridges(self.override, source, True)
+        self.assertEqual(mirror.count("int PortRetailPauseStart(PAUSE_INFO *info) {"), 1)
+        self.assertNotIn("int PauseStart(", mirror)
+
     def test_town_clear_keeps_retail_body_under_its_bridge(self):
         source = Path(__file__).resolve().parents[2] / "ps2/src/editmap.cpp"
         mirror = unit_copy.retail_bridges(self.override, source, True)

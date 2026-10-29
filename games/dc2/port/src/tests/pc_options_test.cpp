@@ -55,6 +55,7 @@ TEST(PcOptions, RequestedSettingsHaveUniqueRowsAndRoundTripTheirEdits) {
         "game.autosave",
         "game.quick_loadout_title",
         "game.skip_intro",
+        "game.start_skips_cutscenes",
         "game.sprint",
         "game.auto_use_event_item",
         "game.floor_info_monsters",

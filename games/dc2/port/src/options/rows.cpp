@@ -349,6 +349,7 @@ std::vector<Page> MakePages() {
                              Choice<&Config::autosave>("game.autosave", "Autosave", "Saves on arriving in a town or on a dungeon floor.\nThe load screen lists it first.", {"Off", "On"}),
                              Choice<&Config::quick_loadout_plate>("game.quick_loadout_title", "Quick loadout title", "How the D-pad down panel shows its title:\non a bar, or on a plate like the EXP gauge's.", {"Bar", "Plate"}),
                              Choice<&Config::skip_intro>("game.skip_intro", "Skip intro", "Boots past the Sony text, the copyright notice\nand the Level-5 logo to the title screen.", {"Off", "On"}),
+                             Choice<&Config::start_skips_cutscenes>("game.start_skips_cutscenes", "Start skips cutscenes", "On: Start skips a skippable cutscene at once.\nOff: Start pauses it; Triangle skips from there.", {"Off", "On"}),
                              Choice<&Config::sprint>("game.sprint", "Sprint", "Hold R2 while walking to sprint in towns and\ndungeons. A tap still enters first person.", {"Off", "On"}),
                              Choice<&Config::auto_use_event_item>("game.auto_use_event_item", "Auto-use event items", "An event that asks for one item you carry\nis handed it without the item picker.", {"Off", "On"}),
                              Choice<&Config::fishing_rod_shortcuts>("game.fishing_rod_shortcuts", "Fishing rod shortcuts", "With a rod out, L3 puts bait on from the bag\nand R3 puts the rod away for the weapon.", {"Off", "On"}),
