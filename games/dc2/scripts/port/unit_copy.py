@@ -69,6 +69,7 @@ RETAIL_BRIDGES = {
         ("CMenuPosDataManage::StepMainMenuIconMove(int*,int,int)", "StepMainMenuIconMove", "PortRetailStepMainMenuIconMove"),
     ],
     "menucls1.cpp": [("CDC2Mes::DrawMsg()", "DrawMsg", "PortRetailDrawMsg")],
+    "fishingobj.cpp": [("DrawFishingLine()", "DrawFishingLine", "PortRetailDrawFishingLine")],
     "actionchara.cpp": [
         ("CActionChara::DrawEffect()", "DrawEffect", "PortRetailDrawEffect"),
         ("CActionChara::HumanMoveIF()", "HumanMoveIF", "PortRetailHumanMoveIF"),
