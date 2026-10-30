@@ -164,6 +164,11 @@ public partial class ConverterMain : Node
         {
             // A few packs on the disc hold a bare scene instead of a PACK.
             var data = retail.ReadAllBytes(path);
+            if (data.Length == 0)
+            {
+                report.Note(path, "empty file on the disc");
+                return;
+            }
             if (MdsFile.LooksLikeMds(data))
             {
                 ExportModel(models, output, report, path, models.Load(path), ModelDocument.KindModel);
