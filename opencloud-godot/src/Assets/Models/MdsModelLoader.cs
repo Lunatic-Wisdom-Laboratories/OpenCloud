@@ -486,7 +486,7 @@ public sealed partial class MdsModelLoader
         return GameMaterialFactory.Create(colour, texture, vertexColours);
     }
 
-    internal static string SafeNodeName(string name)
+    public static string SafeNodeName(string name)
     {
         // Godot reserves these characters in node names.
         foreach (char c in ".:@/\"%")

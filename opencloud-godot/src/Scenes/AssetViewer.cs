@@ -44,14 +44,18 @@ public partial class AssetViewer : Node3D
     };
 
     /// <summary>
-    /// Max's base rigs hold proxy triangles; his textured outfit is a separate model that the game
-    /// equips, shown on top of the rig when present.
+    /// Max's base rigs hold proxy triangles; <c>SetupMainUnit</c> dresses them with his equipped
+    /// clothes and then his footwear (both through <c>LoadSkin</c>). The viewer uses his starting
+    /// items (comdat file names <c>fuku1</c>, <c>sh001</c>), with the next pair as fallbacks.
     /// </summary>
-    private static readonly string[] MaxOutfitCandidates =
+    private static readonly string[][] MaxCostumeCandidates =
     {
-        "mainchr/c01fuku1.chr",
-        "mainchr/c01fuku1.gltf",
+        new[] { "mainchr/c01fuku1.chr", "mainchr/c01fuku1.gltf" },
+        new[] { "mainchr/c01sh001.chr", "mainchr/c01sh002.chr" },
     };
+
+    /// <summary>Headwear is its own character, hung on Max's "hat" frame (<c>SetRef</c>).</summary>
+    private static readonly string[] MaxHatCandidates = { "mainchr/c01ha001.chr" };
 
     private VirtualFileSystem? _vfs;
     private GameModelLoader? _loader;
@@ -317,11 +321,16 @@ public partial class AssetViewer : Node3D
 
         if (Show(path))
         {
-            var outfit = _loader!.FindFirst(MaxOutfitCandidates);
-            if (outfit != null && path.Contains("base", StringComparison.OrdinalIgnoreCase))
+            if (path.Contains("base", StringComparison.OrdinalIgnoreCase))
             {
-                if (!Dress(outfit))
-                    AddModel(outfit);
+                foreach (var candidates in MaxCostumeCandidates)
+                {
+                    var costume = _loader!.FindFirst(candidates);
+                    if (costume != null && !Dress(costume))
+                        AddModel(costume);
+                }
+                if (_loader!.FindFirst(MaxHatCandidates) is { } hat)
+                    AttachToBone(hat, "hat");
                 RefreshAnimations();
             }
             FrameModel();
@@ -401,6 +410,29 @@ public partial class AssetViewer : Node3D
         {
             _status += $"\n{costume}: {exception.Message}";
             return false;
+        }
+    }
+
+    /// <summary>Loads a model and hangs it on a bone of the loaded character.</summary>
+    private void AttachToBone(string path, string bone)
+    {
+        // Frame names may carry attributes after "--".
+        int BoneIndex(Skeleton3D s) => Enumerable.Range(0, s.GetBoneCount())
+            .FirstOrDefault(i => MdsObject.StripAttributes(s.GetBoneName(i)) == bone, -1);
+        var skeleton = FindAll<Skeleton3D>(_modelRoot).FirstOrDefault(s => s.IsVisibleInTree() && BoneIndex(s) >= 0);
+        if (_loader == null || skeleton == null)
+            return;
+        try
+        {
+            var attachment = new BoneAttachment3D { Name = MdsModelLoader.SafeNodeName("ref_" + bone) };
+            skeleton.AddChild(attachment);
+            attachment.BoneName = skeleton.GetBoneName(BoneIndex(skeleton));
+            attachment.AddChild(_loader.Load(path));
+            _status += $"\n{path}: on {bone}";
+        }
+        catch (Exception exception)
+        {
+            _status += $"\n{path}: {exception.Message}";
         }
     }
 
