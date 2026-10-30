@@ -12,6 +12,7 @@ The repository holds code only: the engine reads the user's own game data at run
 dotnet build          # must finish with 0 errors
 godot --path . -- --data=/path/to/data      # opens the asset viewer
 godot --path . res://src/Scenes/MapViewer.tscn -- --data=/path/to/data --map=s01   # map viewer
+godot --path . res://src/Scenes/TownScene.tscn -- --data=/path/to/data --map=s01   # walk as Max
 ```
 
 ## Game data
@@ -44,7 +45,8 @@ reach into PACK archives: `chara/c01_base.chr/c01_base.mds`.
 | `src/Game/Items` | `ItemCatalog`: the common item table (`menu/cfg7/comdat.cfg`), item types and families |
 | `src/Game/Save` | `GlobalSaveState` (shared world state), `SaveOperation`, `Inventory`, `PlayerLocalState`, `PlayerRoster` |
 | `src/Net` | `NetworkManager` (ENet co-op session) and `SaveSync` (host-authoritative save replication) |
-| `src/Scenes` | `AssetViewer` (main scene), `MapViewer`, `LoaderSmokeTest` and `NetSyncSmokeTest` (headless checks) |
+| `src/Gameplay` | `PlayerCharacter` (town controller), `CharacterMotion` (motions by game name), `TownCamera`, `PadInput`, `PlayerModels` (dressed player rigs), `PlayerSync` (30 Hz network sync) |
+| `src/Scenes` | `AssetViewer` (main scene), `MapViewer`, `TownScene`, `LoaderSmokeTest` and `NetSyncSmokeTest` (headless checks) |
 | `tools` | `make_test_data.py`: synthetic sample data, no game content |
 
 ## Asset viewer
@@ -126,6 +128,53 @@ Not yet: vertex/shape motion
 (`SHAPE_ANIME`, key types 12/20/21), material, visibility and camera keys, motion blending,
 sequences (`SEQ`), cloth.
 
+## Walking in town
+
+`TownScene` loads a map and puts Max at its `CHARA_POS`, dressed as `SetupMainUnit` dresses him:
+his field rig `mainchr/c01_base2` (the town rig `chara/c01_base` keeps a placeholder where the
+shoes go, so it is only the fallback), clothes and shoes as costumes, the cap on the `hat` frame. Models go through `GameModelLoader`, so converted glTF files are picked up too.
+
+WASD/arrows or the left stick move (Shift walks on the keyboard) · Q/E or L1/R1, J/L or the right
+stick turn the camera · I/K raise and lower it · C or L2 swings it behind Max · R back to the start ·
+Tab map viewer · F1 help.
+
+The controller follows the town loop's `CharaControl` and `EditMoveChara`, at the game's 30 Hz:
+
+- The stick is calibrated like the original pad (dead zone 50 of 128, the rest stretched to full)
+  and turned by the camera angle. Full stick is 5 units a game frame, 0.7 of that on maps under 800
+  units across. The facing turns at most 0.3 rad a frame; under 0.8 stick strength Max walks
+  (`歩き`, step 0.1 + strength / 0.8), above it he runs (`走り`), and stands (`立ち`) with no input.
+- Gravity is 0.6 a frame down to -10. Ground is searched from 10 above the feet, 20 down
+  (`MoveCheck`/`GetFootPoly` against the walk collision): ledges up to 10 are stepped onto, and
+  after more than three airborne frames he plays `落下中`. Landing faster than 5 plays `着地` and
+  holds him for up to 20 frames. Walls stop a 13-unit cylinder that starts above the step height.
+- Motions change as `SetMotion` does: a motion already playing keeps its frame, a new one blends in
+  over about 4.5 frames, a step is motion frames per game frame.
+- The model is drawn between the last two game frames, and the camera follows the drawn model,
+  so the 30 Hz logic looks smooth.
+
+The camera is `CCameraControl` with the town parameters: it trails the look-at point (Max plus 30
+up) between 100 and 160 units away, at a height the right stick moves between -15 and 40 that
+drifts back to -15..20, eye and look-at point closing 1/4 and 1/3 of their gap a frame. It is kept
+in front of camera collision and 30 above the ground.
+
+Not yet: water (wading speed, `水中走り`, ripples), foot sounds and dust, events (doors, ladders,
+treasure, talk), fixed camera areas, the georama edit mode, Monica's equipment.
+
+### Players and co-op
+
+Every player is a `PlayerCharacter` owned by a network peer (its multiplayer authority), named
+`Players/Player<peer id>` on every peer. `TownScene.SpawnPlayer(peerId, slot)` adds one (slot 0
+Max, 1 Monica) and `RemovePlayer(peerId)` takes it away; the co-op session layer calls them when
+players join and leave. Only the owner runs the controller. Its `PlayerSync` sends position,
+facing and motion once a game frame (30 Hz) with unreliable ordered RPCs on transfer channel 2,
+through whatever peer the scene tree's multiplayer API holds; the other peers draw that player
+three game frames in the past, interpolating between the states received.
+
+For testing the sync without the session layer, `--net-host=<port>` and
+`--net-join=<address>:<port>` open a bare two-player ENet session, and `--net-report=<seconds>`
+prints every player's position after that long and quits.
+
 ## Headless check
 
 ```sh
@@ -135,7 +184,11 @@ godot --headless --path . res://src/Scenes/LoaderSmokeTest.tscn -- --data=/tmp/o
 godot --headless --path . res://src/Scenes/LoaderSmokeTest.tscn -- --data=/tmp/oc-test/converted/data.zip \
     --model=chara/c01_base.gltf
 godot --headless --path . res://src/Scenes/LoaderSmokeTest.tscn -- --data=/tmp/oc-test/retail --map=t01
+godot --headless --path . res://src/Scenes/TownScene.tscn -- --data=/tmp/oc-test/retail --map=t01 --selftest=60
 ```
+
+The town self-test holds the stick forward for 60 game frames and fails unless Max moved and
+stands on the synthetic map's floor.
 
 ## Co-op save state
 
