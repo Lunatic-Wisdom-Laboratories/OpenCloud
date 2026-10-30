@@ -44,6 +44,8 @@ public:
     virtual rust::String            duplicate_save(rust::Str file) const = 0;
     virtual rust::String            export_save(rust::Str file, rust::Str destination) const = 0;
     virtual rust::String            import_save(rust::Str source) const = 0;
+    /** Converts the PS2 saves at source (a memory card, a .psu or a save folder) in; report says what was imported. */
+    virtual rust::String import_ps2(rust::Str source, rust::String &report) const = 0;
     virtual std::int32_t            legacy_save_count() const = 0;
     virtual rust::String            legacy_folder() const = 0;
     /** Copies the legacy saves in; imported is how many files were copied. */

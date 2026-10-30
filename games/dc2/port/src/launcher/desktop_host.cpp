@@ -78,6 +78,13 @@ public:
 
     rust::String import_save(rust::Str source) const override { return launcher::ImportSave(Std(source)); }
 
+    rust::String import_ps2(rust::Str source, rust::String &report) const override {
+        std::string text;
+        std::string error = launcher::ImportPs2(Std(source), text);
+        report = text;
+        return error;
+    }
+
     std::int32_t legacy_save_count() const override { return launcher::LegacySaveCount(); }
 
     rust::String legacy_folder() const override { return launcher::LegacyFolder(); }

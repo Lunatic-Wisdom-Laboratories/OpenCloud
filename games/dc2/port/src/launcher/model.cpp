@@ -15,6 +15,7 @@
 #include <set>
 #include <sstream>
 #include <system_error>
+#include <tuple>
 #include <utility>
 
 #ifdef _WIN32
@@ -27,15 +28,18 @@
 #endif
 
 #include "gfx/gfx.hpp"
+#include "launcher/ps2_card.hpp"
 #include "inventmn.hpp"
 #include "log/log.hpp"
 #include "options/rows.hpp"
 #include "photo_hd.hpp"
+#include "ps2_save_layout.hpp"
 #include "platform/config.hpp"
 #include "platform/files.hpp"
 #include "platform/paths.hpp"
 #include "save_json.hpp"
 #include "save_slots.hpp"
+#include "savedata.hpp"
 
 namespace launcher {
 namespace fs = std::filesystem;
@@ -49,6 +53,11 @@ constexpr char kSettingsFile[] = "launcher.json";
 // ChronicleTwo's per-user folder, whose saves the launcher copies in and never changes.
 constexpr char kLegacyApp[] = "chronicletwo";
 constexpr char kAlbumName[] = "BESCES-51190dc2album";
+// The PAL disc's names on a memory card: saves are <prefix>dkcl<number>, the album <prefix>dc2album and the bonus
+// sub-games' records kOmakeName. The American (NTSC) disc writes the same files under its own prefix.
+constexpr std::string_view kPalPrefix = "BESCES-51190";
+constexpr std::string_view kNtscPrefix = "BASCUS-97213";
+constexpr char             kOmakeName[] = "BESCES-51190dc2omake";
 
 std::optional<Language> chosen;
 bool                    chosen_loaded = false;
@@ -325,6 +334,114 @@ bool CopyNew(const fs::path &from, const fs::path &to) {
     return fs::copy_file(from, to, fs::copy_options::none, error) && !error;
 }
 
+std::string Fill(std::string text, const std::string &value) {
+    if (const auto at = text.find("{}"); at != std::string::npos) {
+        text.replace(at, 2, value);
+    }
+    return text;
+}
+
+// The save number of a card's save folder name, "BESCES-51190dkcl3", or -1.
+int Ps2SaveNumber(std::string_view name, std::string_view prefix) {
+    if (!name.starts_with(prefix) || name.size() == prefix.size() || name.size() > prefix.size() + 3) {
+        return -1;
+    }
+    int number = 0;
+    for (const char digit : name.substr(prefix.size())) {
+        if (digit < '0' || digit > '9') {
+            return -1;
+        }
+        number = number * 10 + (digit - '0');
+    }
+    return number;
+}
+
+// The disc a card folder belongs to: PAL, NTSC, or neither (empty).
+std::string_view RegionOf(std::string_view name) {
+    for (const std::string_view prefix : {kPalPrefix, kNtscPrefix}) {
+        if (name.starts_with(prefix)) {
+            return prefix;
+        }
+    }
+    return {};
+}
+
+// A save folder of a region read neither way ("BISCPS-15036dkcl0"): a product code, then "dkcl" and the number.
+bool OtherRegionSave(std::string_view name) {
+    const auto at = name.find("dkcl");
+    return RegionOf(name).empty() && at == 12 && name[0] == 'B' && name[6] == '-' &&
+           Ps2SaveNumber(name, name.substr(0, at + 4)) >= 0;
+}
+
+// The save number of a PAL or NTSC save folder, or -1.
+int SaveFolderNumber(std::string_view name) {
+    const std::string_view region = RegionOf(name);
+    return region.empty() ? -1 : Ps2SaveNumber(name, std::string(region) + "dkcl");
+}
+
+const Ps2File *FileNamed(const Ps2Folder &folder, std::string_view name) {
+    for (const Ps2File &file : folder.files) {
+        if (file.name == name) {
+            return &file;
+        }
+    }
+    return nullptr;
+}
+
+// The album as the PS2 wrote it, laid out as the port keeps it, when its check digits hold.
+std::unique_ptr<CDC2AlbumData> AlbumFromPs2(const std::vector<std::uint8_t> &bytes) {
+    constexpr std::size_t kPhotos = INVENT_ALBUM_PHOTO_NUM;
+    static_assert(sizeof(CDC2AlbumData) == Ps2HostSize(kPs2AlbumSize, kPhotos),
+                  "the photos must be the only difference between the PS2's album and the host's");
+    constexpr std::size_t kDigitData = sizeof(CDC2AlbumData::photo_work);
+    constexpr std::size_t kDigitSize = kPs2PictureSize * kPhotos;
+    if (bytes.size() != kPs2AlbumSize) {
+        return nullptr;
+    }
+    // Retail checks only an album whose digits are not both zero (CMemoryCardManager::LoadAlbum).
+    const int checksum = static_cast<int>(bytes[kDigitData + kDigitSize] | (bytes[kDigitData + kDigitSize + 1] << 8) |
+                                          (bytes[kDigitData + kDigitSize + 2] << 16) |
+                                          (static_cast<std::uint32_t>(bytes[kDigitData + kDigitSize + 3]) << 24));
+    const int trailer = static_cast<int>(bytes[kDigitData + kDigitSize + 4] | (bytes[kDigitData + kDigitSize + 5] << 8) |
+                                         (bytes[kDigitData + kDigitSize + 6] << 16) |
+                                         (static_cast<std::uint32_t>(bytes[kDigitData + kDigitSize + 7]) << 24));
+    if ((checksum != 0 || trailer != 0) &&
+        checksum != CheckDigit(reinterpret_cast<const char *>(bytes.data() + kDigitData), kDigitSize)) {
+        return nullptr;
+    }
+    auto album = std::unique_ptr<CDC2AlbumData>(static_cast<CDC2AlbumData *>(::operator new(sizeof(CDC2AlbumData))));
+    Ps2PicturesToHost(bytes, {reinterpret_cast<unsigned char *>(album.get()), sizeof(CDC2AlbumData)},
+                      offsetof(CDC2AlbumData, photo), kPhotos);
+    // The host's digits, over its own records, as the game's next album save would write them.
+    auto *file = reinterpret_cast<AlbumFile *>(album.get());
+    file->checksum = file->trailer = CheckDigit(file->digit_data, sizeof(file->digit_data));
+    return album;
+}
+
+// A card folder's other files, its icons, beside the main file written into to; nothing there is replaced.
+bool WriteCardFolder(const Ps2Folder &folder, const fs::path &to) {
+    for (const Ps2File &file : folder.files) {
+        const fs::path path = to / PathsFromUtf8(file.name);
+        std::error_code error;
+        if (file.name != folder.name && !fs::exists(path, error) &&
+            FilesWrite(path, file.bytes.data(), file.bytes.size(), false) == FilesResult::kFailed) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string Ps2Error(Ps2CardResult result) {
+    switch (result) {
+        case Ps2CardResult::Unreadable:
+            return Text("error.ps2_unreadable");
+        case Ps2CardResult::Damaged:
+            return Text("error.ps2_damaged");
+        default:
+            return Text("error.ps2_unknown");
+    }
+}
+
 } // namespace
 
 Language CurrentLanguage() {
@@ -567,6 +684,131 @@ std::string ImportLegacy(int &imported) {
         }
     }
     CT_LOG_INFO(Main, "launcher: imported {} files from {}", imported, PathsDisplay(*root));
+    return {};
+}
+
+std::string ImportPs2(const std::string &source, std::string &report) {
+    report.clear();
+    if (SavesProtected()) {
+        return Text("error.protected");
+    }
+    // Only Dark Cloud 2's folders are read whole; another region's saves are listed to say why they are left.
+    int                    other_region = 0;
+    std::vector<Ps2Folder> folders;
+    const auto             wanted = [&other_region](const std::string &name) {
+        if (OtherRegionSave(name)) {
+            ++other_region;
+            return false;
+        }
+        return !RegionOf(name).empty();
+    };
+    if (const Ps2CardResult result = Ps2ReadSource(PathsFromUtf8(source), wanted, folders);
+        result != Ps2CardResult::Read) {
+        return Ps2Error(result);
+    }
+    // PAL first, so its album and records win over NTSC ones; saves in their number order.
+    const auto order = [](const Ps2Folder &folder) {
+        return std::tuple(RegionOf(folder.name) != kPalPrefix, SaveFolderNumber(folder.name), folder.name);
+    };
+    std::ranges::sort(folders, [&order](const Ps2Folder &a, const Ps2Folder &b) { return order(a) < order(b); });
+
+    std::error_code error;
+    fs::create_directories(SaveSlotsRoot(), error);
+    // A save imported before is the same file again, byte for byte.
+    std::set<std::string> existing;
+    for (const auto &entry : fs::directory_iterator(SaveSlotsRoot(), error)) {
+        if (entry.path().extension() == ".json") {
+            existing.insert(ReadText(entry.path()));
+        }
+    }
+    int  imported = 0, ntsc = 0, same = 0, damaged = 0;
+    // Each of the album and the records is imported, kept out because this installation has its own, or neither.
+    bool album_imported = false, album_kept = false, omake_imported = false, omake_kept = false;
+    for (const Ps2Folder &folder : folders) {
+        const Ps2File         *file = FileNamed(folder, folder.name);
+        const std::string_view region = RegionOf(folder.name);
+        const std::string      album_name = std::string(region) + "dc2album";
+        const std::string      omake_name = std::string(region) + "dc2omake";
+        if (SaveFolderNumber(folder.name) >= 0) {
+            auto document = std::make_unique<SaveDocument>();
+            if (!file || SaveSlotReadPs2(file->bytes, *document) != SaveSlotState::Ready) {
+                ++damaged;
+                continue;
+            }
+            const std::string text = SaveJsonWrite(*document);
+            if (existing.contains(text)) {
+                ++same;
+                continue;
+            }
+            const fs::path to = SaveSlotPath(FreeNumber(SaveSlotsRoot()));
+            if (SaveSlotWrite(to, *document, false) != FilesResult::kWritten) {
+                return Failed("error.import", PathsDisplay(to));
+            }
+            existing.insert(text);
+            ++imported;
+            ntsc += region == kNtscPrefix;
+            CT_LOG_INFO(Main, "launcher: imported PS2 save {} from {} as {}", folder.name, source, PathsDisplay(to));
+        } else if (folder.name == album_name && file) {
+            const fs::path to = AlbumPath(PathsSaveRoot(), 0);
+            if (fs::exists(to, error)) {
+                album_kept = true;
+                continue;
+            }
+            const auto album = AlbumFromPs2(file->bytes);
+            if (!album) {
+                ++damaged;
+                continue;
+            }
+            fs::create_directories(to.parent_path(), error);
+            if (FilesWrite(to, album.get(), sizeof(CDC2AlbumData), false) != FilesResult::kWritten ||
+                !WriteCardFolder(folder, to.parent_path())) {
+                return Failed("error.import", PathsDisplay(to));
+            }
+            album_imported = true;
+        } else if (folder.name == omake_name && file) {
+            // The bonus sub-games' records keep the PS2's layout on the host.
+            const fs::path to = PathsSaveRoot() / "mc0" / kOmakeName / kOmakeName;
+            if (fs::exists(to, error)) {
+                omake_kept = true;
+                continue;
+            }
+            if (file->bytes.size() != sizeof(CSubGameData) || file->bytes[0] != 0) {
+                ++damaged;
+                continue;
+            }
+            fs::create_directories(to.parent_path(), error);
+            if (FilesWrite(to, file->bytes.data(), file->bytes.size(), false) != FilesResult::kWritten ||
+                !WriteCardFolder(folder, to.parent_path())) {
+                return Failed("error.import", PathsDisplay(to));
+            }
+            omake_imported = true;
+        }
+    }
+    if (imported == 0 && same == 0 && damaged == 0 && !album_imported && !album_kept && !omake_imported && !omake_kept) {
+        return Text(other_region > 0 ? "error.ps2_region" : "error.ps2_none");
+    }
+    std::vector<std::string> lines{Fill(Text("saves.ps2_done"), std::to_string(imported))};
+    if (same > 0) {
+        lines.push_back(Fill(Text("saves.ps2_same"), std::to_string(same)));
+    }
+    if (album_imported || album_kept) {
+        lines.push_back(Text(album_imported ? "saves.ps2_album" : "saves.ps2_album_kept"));
+    }
+    if (omake_imported || omake_kept) {
+        lines.push_back(Text(omake_imported ? "saves.ps2_omake" : "saves.ps2_omake_kept"));
+    }
+    if (damaged > 0) {
+        lines.push_back(Fill(Text("saves.ps2_damaged"), std::to_string(damaged)));
+    }
+    if (ntsc > 0) {
+        lines.push_back(Fill(Text("saves.ps2_ntsc"), std::to_string(ntsc)));
+    }
+    if (other_region > 0) {
+        lines.push_back(Fill(Text("saves.ps2_region"), std::to_string(other_region)));
+    }
+    for (const std::string &line : lines) {
+        report += (report.empty() ? "" : "\n") + line;
+    }
     return {};
 }
 

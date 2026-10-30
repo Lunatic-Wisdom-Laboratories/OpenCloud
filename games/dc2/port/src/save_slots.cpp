@@ -23,9 +23,11 @@
 #include <memory>
 #include <ranges>
 #include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -33,6 +35,7 @@
 #include "log/log.hpp"
 #include "platform/files.hpp"
 #include "platform/paths.hpp"
+#include "ps2_save_layout.hpp"
 #include "save_slots.hpp"
 #include "userdata.hpp"
 
@@ -127,16 +130,17 @@ SaveSlotState ReadJsonText(const fs::path &path, std::uintmax_t size, std::strin
     return SaveSlotState::Ready;
 }
 
-// Reads a legacy image of the port's host layout and converts it as loading it would: a Ver2 image's cards through
-// the retail routine, and the towns' layouts out of their records.
-SaveSlotState ReadImage(const fs::path &path, std::uintmax_t size, SaveDocument &document) {
-    if (size != sizeof(SAVEDATA_FORMAT)) {
-        return SaveSlotState::WrongSize;
-    }
-    auto image = std::make_unique<SAVEDATA_FORMAT>();
-    if (FilesRead(path, image.get(), sizeof(*image)) != sizeof(*image)) {
-        return SaveSlotState::Unreadable;
-    }
+// Retail accepts Ver2 without check digits, and older images with zero digits.
+bool DigitsMatch(const char *version, int check_digit, int check_digit_half, const char *data) {
+    return std::memcmp(version, kVersion2, sizeof(kVersion2)) == 0 ||
+           ((!check_digit || check_digit == CheckDigit(data, sizeof(CSaveData))) &&
+            (!check_digit_half || check_digit_half == CheckDigit(data, sizeof(CSaveData) / 2)));
+}
+
+// Converts a legacy image of the port's host layout as loading it would: a Ver2 image's cards through the retail
+// routine, and the towns' layouts out of their records. Its check digits are checked here unless the caller checked
+// them on the bytes they were made from.
+SaveSlotState ConvertImage(std::unique_ptr<SAVEDATA_FORMAT> image, bool check_digits, SaveDocument &document) {
     const bool old_version = std::memcmp(image->version, kVersion2, sizeof(kVersion2)) == 0;
     if (!old_version && std::memcmp(image->version, kVersion4, sizeof(kVersion4)) != 0) {
         return SaveSlotState::WrongVersion;
@@ -144,10 +148,8 @@ SaveSlotState ReadImage(const fs::path &path, std::uintmax_t size, SaveDocument 
     if (image->incomplete) {
         return SaveSlotState::Incomplete;
     }
-    // Retail accepts Ver2 without check digits, and older images with zero digits.
-    const char *data = reinterpret_cast<const char *>(&image->save_data);
-    if (!old_version && ((image->check_digit && image->check_digit != CheckDigit(data, sizeof(CSaveData))) ||
-                         (image->check_digit_half && image->check_digit_half != CheckDigit(data, sizeof(CSaveData) / 2)))) {
+    if (check_digits && !DigitsMatch(image->version, image->check_digit, image->check_digit_half,
+                                     reinterpret_cast<const char *>(&image->save_data))) {
         return SaveSlotState::BadChecksum;
     }
     std::memcpy(static_cast<void *>(&document.image), image.get(), sizeof(*image));
@@ -170,6 +172,17 @@ SaveSlotState ReadImage(const fs::path &path, std::uintmax_t size, SaveDocument 
     }
     document.spawn.reset();
     return SaveSlotState::Ready;
+}
+
+SaveSlotState ReadImage(const fs::path &path, std::uintmax_t size, SaveDocument &document) {
+    if (size != sizeof(SAVEDATA_FORMAT)) {
+        return SaveSlotState::WrongSize;
+    }
+    auto image = std::make_unique<SAVEDATA_FORMAT>();
+    if (FilesRead(path, image.get(), sizeof(*image)) != sizeof(*image)) {
+        return SaveSlotState::Unreadable;
+    }
+    return ConvertImage(std::move(image), true, document);
 }
 
 SaveSlotState ReadImageHeader(const fs::path &path, std::uintmax_t size, SAVEDATA_INFO &info) {
@@ -668,4 +681,26 @@ FilesResult SaveSlotWrite(const SaveSlot &slot, const SaveDocument &document) {
 
 void SaveSlotSetImportHook(SaveSlotImportHook hook) {
     import_hook = std::move(hook);
+}
+
+SaveSlotState SaveSlotReadPs2(std::span<const unsigned char> bytes, SaveDocument &document) {
+    constexpr std::size_t kPhotos = std::extent_v<decltype(CInventUserData::photo)>;
+    static_assert(sizeof(SAVEDATA_FORMAT) == Ps2HostSize(kPs2SaveImageSize, kPhotos),
+                  "the carried photos must be the only difference between the PS2's save image and the host's");
+    if (bytes.size() != kPs2SaveImageSize) {
+        return SaveSlotState::WrongSize;
+    }
+    // The header and the save data's first half and more precede the photos, so the PS2's digits are checked on its
+    // own bytes, which they were made from.
+    const auto &header = *reinterpret_cast<const SAVEDATA_FORMAT *>(bytes.data());
+    if (!DigitsMatch(header.version, header.check_digit, header.check_digit_half,
+                     reinterpret_cast<const char *>(bytes.data() + offsetof(SAVEDATA_FORMAT, save_data)))) {
+        return SaveSlotState::BadChecksum;
+    }
+    auto       image = std::make_unique<SAVEDATA_FORMAT>();
+    const auto photos = static_cast<std::size_t>(
+        reinterpret_cast<const char *>(image->save_data.GetUserDataManager()->GetInventUserData()->photo) -
+        reinterpret_cast<const char *>(image.get()));
+    Ps2PicturesToHost(bytes, {reinterpret_cast<unsigned char *>(image.get()), sizeof(SAVEDATA_FORMAT)}, photos, kPhotos);
+    return ConvertImage(std::move(image), false, document);
 }

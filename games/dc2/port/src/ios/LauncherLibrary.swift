@@ -35,6 +35,8 @@ final class SavesController: UITableViewController, UIDocumentPickerDelegate {
     private var saves: [ct.ios.SaveInfo] = []
     private var legacy: Int32 = 0
     private var protected = false
+    // Whether the open picker is choosing a PS2 memory card, .psu or save folder rather than a JSON save.
+    private var pickingPs2 = false
 
     init() {
         super.init(style: .insetGrouped)
@@ -47,8 +49,10 @@ final class SavesController: UITableViewController, UIDocumentPickerDelegate {
         super.viewDidLoad()
         navigationItem.rightBarButtonItem = UIBarButtonItem(title: tr("ios.done"), style: .done, target: self,
                                                             action: #selector(done))
-        navigationItem.leftBarButtonItem = UIBarButtonItem(title: tr("saves.import"), style: .plain, target: self,
-                                                           action: #selector(importSave))
+        navigationItem.leftBarButtonItems = [
+            UIBarButtonItem(title: tr("saves.import"), style: .plain, target: self, action: #selector(importSave)),
+            UIBarButtonItem(title: tr("saves.ps2_import"), style: .plain, target: self, action: #selector(importPs2)),
+        ]
         reload()
     }
 
@@ -153,11 +157,37 @@ final class SavesController: UITableViewController, UIDocumentPickerDelegate {
         // A copy: the picked file stays where it is.
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.json], asCopy: true)
         picker.delegate = self
+        pickingPs2 = false
         present(picker, animated: true)
+    }
+
+    // A memory card or .psu file, or a folder (a folder memory card or a save folder), read where it is.
+    @objc private func importPs2() {
+        let sheet = UIAlertController(title: tr("saves.ps2_import"), message: tr("saves.ps2_help"),
+                                      preferredStyle: .alert)
+        sheet.addAction(UIAlertAction(title: tr("ios.continue"), style: .default) { [weak self] _ in
+            guard let self else { return }
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data, .folder], asCopy: false)
+            picker.delegate = self
+            self.pickingPs2 = true
+            self.present(picker, animated: true)
+        })
+        sheet.addAction(UIAlertAction(title: tr("confirm.cancel"), style: .cancel))
+        present(sheet, animated: true)
     }
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         guard let url = urls.first else { return }
+        if pickingPs2 {
+            let access = url.startAccessingSecurityScopedResource()
+            let outcome = ct.ios.ImportPs2(std.string(url.path))
+            if access {
+                url.stopAccessingSecurityScopedResource()
+            }
+            present(alert(tr("saves.ps2_import"), String(outcome.message)), animated: true)
+            reload()
+            return
+        }
         let error = String(ct.ios.ImportSave(std.string(url.path)))
         present(alert(tr("saves.import"), error.isEmpty ? tr("saves.imported_one") : error), animated: true)
         reload()

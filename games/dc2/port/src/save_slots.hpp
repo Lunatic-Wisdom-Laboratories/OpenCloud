@@ -4,6 +4,7 @@
 #include <functional>
 #include <optional>
 #include <set>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -66,6 +67,12 @@ const char *SaveSlotStatus(SaveSlotState state);
  * Reads a whole save: a JSON file, or a legacy image converted in memory.
  */
 SaveSlotState SaveSlotRead(const std::filesystem::path &path, SaveDocument &document);
+/**
+ * Converts a save file as a PS2 wrote it to its memory card (SAVEDATA_FORMAT in the PS2's layout), checking its
+ * check digits, as loading a legacy image would.
+ */
+SaveSlotState SaveSlotReadPs2(std::span<const unsigned char> bytes, SaveDocument &document);
+
 /**
  * Lists the saves, after converting each legacy image, flat or on a card, into a JSON file once.
  */

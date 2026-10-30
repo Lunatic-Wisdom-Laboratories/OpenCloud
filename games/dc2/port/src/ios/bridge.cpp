@@ -141,6 +141,15 @@ Outcome ImportLegacy() {
     return {.ok = true, .message = Fill(launcher::Text("saves.legacy_done"), std::to_string(imported))};
 }
 
+Outcome ImportPs2(const std::string &source) {
+    std::string       report;
+    const std::string error = launcher::ImportPs2(source, report);
+    if (!error.empty()) {
+        return {.message = error};
+    }
+    return {.ok = true, .message = report};
+}
+
 int RefreshPhotos() {
     photos.clear();
     const char *home = std::getenv("HOME");

@@ -58,6 +58,8 @@ pub trait Backend {
     fn duplicate_save(&self, file: &str) -> Result<(), String>;
     fn export_save(&self, file: &str, destination: &str) -> Result<(), String>;
     fn import_save(&self, source: &str) -> Result<(), String>;
+    /// Converts PS2 saves in from a memory card, a .psu or a save folder; Ok is what was imported.
+    fn import_ps2(&self, source: &str) -> Result<String, String>;
     fn legacy_save_count(&self) -> usize;
     fn legacy_folder(&self) -> String;
     fn import_legacy(&self) -> Result<usize, String>;
@@ -661,6 +663,38 @@ mod ui {
                     open_folder(&self.backend.saves_folder());
                 }
             });
+            if !protected {
+                ui.add_space(6.0);
+                egui::Frame::new()
+                    .fill(CARD)
+                    .corner_radius(8)
+                    .inner_margin(Margin::same(10))
+                    .show(ui, |ui| {
+                        let mut source = None;
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.button(self.t("saves.ps2_import")).clicked() {
+                                source = rfd::FileDialog::new()
+                                    .set_title(self.t("saves.ps2_import"))
+                                    .add_filter("PS2", &["ps2", "psu"])
+                                    .pick_file();
+                            }
+                            if ui.button(self.t("saves.ps2_import_folder")).clicked() {
+                                source = rfd::FileDialog::new()
+                                    .set_title(self.t("saves.ps2_import_folder"))
+                                    .pick_folder();
+                            }
+                        });
+                        ui.label(RichText::new(self.t("saves.ps2_help")).color(MUTED).small());
+                        if let Some(path) = source {
+                            match self.backend.import_ps2(&path.to_string_lossy()) {
+                                Ok(report) => self.ok(report),
+                                Err(error) => self.fail(error),
+                            }
+                            self.saves = None;
+                            self.album = None;
+                        }
+                    });
+            }
             let legacy = self.backend.legacy_save_count();
             if legacy > 0 {
                 ui.add_space(6.0);

@@ -85,6 +85,8 @@ struct Outcome {
 
 // Copies ChronicleTwo's saves and album in, leaving its folder as it is.
 Outcome ImportLegacy();
+// Converts the PS2 saves of a PCSX2 memory card, a .psu or a save folder in, leaving the source as it is.
+Outcome ImportPs2(const std::string &source);
 
 // The memory card album's photos, as RefreshPhotos last listed them, each written as a PNG to show and share.
 struct PhotoInfo {

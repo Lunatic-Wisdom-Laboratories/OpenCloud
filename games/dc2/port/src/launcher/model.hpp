@@ -88,6 +88,11 @@ int         LegacySaveCount();
 std::string LegacyFolder();
 // Copies them in, keeping both when a number is taken; imported counts the files copied.
 std::string ImportLegacy(int &imported);
+// PS2 saves, from a PCSX2 memory card (.ps2, or a folder memory card), a .psu export or a save folder copied off a
+// card. Saves are converted and added as new ones; the card's photo album and Spheda and Finny Frenzy records are
+// copied only where this installation has none. The source is only read. Returns the error to show, or an empty
+// string with report set to what was imported.
+std::string ImportPs2(const std::string &source, std::string &report);
 // ChronicleTwo's data packs (upscaled textures and the like), offered apart from the saves for their size: the folder
 // to copy from (empty without one) and its size in bytes. The launcher copies them, keeping files already there.
 std::string   LegacyDatapacksFolder();

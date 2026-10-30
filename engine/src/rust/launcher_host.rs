@@ -59,6 +59,7 @@ mod ffi {
         fn duplicate_save(self: &LauncherHost, file: &str) -> String;
         fn export_save(self: &LauncherHost, file: &str, destination: &str) -> String;
         fn import_save(self: &LauncherHost, source: &str) -> String;
+        fn import_ps2(self: &LauncherHost, source: &str, report: &mut String) -> String;
         fn legacy_save_count(self: &LauncherHost) -> i32;
         fn legacy_folder(self: &LauncherHost) -> String;
         fn import_legacy(self: &LauncherHost, imported: &mut i32) -> String;
@@ -184,6 +185,11 @@ impl Backend for Host<'_> {
 
     fn import_save(&self, source: &str) -> Result<(), String> {
         outcome(self.0.import_save(source))
+    }
+
+    fn import_ps2(&self, source: &str) -> Result<String, String> {
+        let mut report = String::new();
+        outcome(self.0.import_ps2(source, &mut report)).map(|()| report)
     }
 
     fn legacy_save_count(&self) -> usize {
