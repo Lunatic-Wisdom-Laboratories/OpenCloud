@@ -110,7 +110,13 @@ public static class PlayerModels
                 attachment.AddChild(part);
                 // The part plays its own first motion, as the game steps a SetRef part: the
                 // hat's motion is what turns it the right way up on the frame.
-                notes.Add($"    part motion: {PlayFirstMotion(part) ?? "none"}");
+                string? motion = PlayFirstMotion(part);
+                notes.Add($"    part motion: {motion ?? "none"}");
+                if (motion == null)
+                {
+                    PoseAtRest(part);
+                    Callable.From(() => PoseAtRest(part)).CallDeferred();
+                }
                 notes.Add($"  {path}: on {frame} of {skeleton.GetParent()?.Name}");
             }
             catch (Exception exception) when (exception is System.IO.InvalidDataException or ArgumentException)
@@ -118,6 +124,27 @@ public static class PlayerModels
                 notes.Add($"  {path}: {exception.Message}");
             }
             return;
+        }
+    }
+
+    /// <summary>
+    /// Puts a part without motion on its rest pose. Its meshes hang on its own frames, and
+    /// nothing moves those frames after it is hung, so Godot never places the meshes on them
+    /// (the cap lost its root frame's half turn and hung upside down).
+    /// </summary>
+    private static void PoseAtRest(Node part)
+    {
+        if (!GodotObject.IsInstanceValid(part))
+            return;
+        foreach (var skeleton in FindAll<Skeleton3D>(part))
+        {
+            skeleton.ResetBonePoses();
+            foreach (var attachment in skeleton.GetChildren().OfType<BoneAttachment3D>())
+            {
+                int bone = skeleton.FindBone(attachment.BoneName);
+                if (bone >= 0)
+                    attachment.Transform = skeleton.GetBoneGlobalPose(bone);
+            }
         }
     }
 
