@@ -16,7 +16,7 @@ namespace OpenCloud.Scenes;
 /// data, loads Max by default and lets any model of the data be browsed with a free camera.
 ///
 /// Keys: PageDown/PageUp next/previous model, Home back to Max, F reframe, B toggle bone
-/// markers, R reload, F1 toggle help. Animations (motions of a character pack or glTF clips)
+/// markers, R reload, Tab map viewer, F1 toggle help. Animations (motions of a character pack or glTF clips)
 /// are listed on the right: click one or use Up/Down, Space pauses, Left/Right step one motion
 /// frame while paused, -/= change the speed, T toggles the game's per-action KEY step.
 /// Camera: see <see cref="FreeCamera"/>.
@@ -155,6 +155,9 @@ public partial class AssetViewer : Node3D
             case Key.B:
                 _showBones = !_showBones;
                 ApplyBoneMarkers();
+                break;
+            case Key.Tab:
+                GetTree().ChangeSceneToFile("res://src/Scenes/MapViewer.tscn");
                 break;
             case Key.F1:
                 _showHelp = !_showHelp;
@@ -665,7 +668,7 @@ public partial class AssetViewer : Node3D
         if (_showHelp)
         {
             text.AppendLine();
-            text.AppendLine("PgDn/PgUp browse  Home Max  F frame  B bones  R reload  F1 help");
+            text.AppendLine("PgDn/PgUp browse  Home Max  F frame  B bones  R reload  Tab map viewer  F1 help");
             text.AppendLine("Up/Down animation  Space pause  Left/Right frame step  -/= speed  T KEY step  0 rest pose");
             text.AppendLine("RMB look  WASD move  Q/E down/up  Shift fast  Wheel speed");
         }

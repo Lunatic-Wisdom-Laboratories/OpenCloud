@@ -3,7 +3,7 @@
 
 Nothing here comes from the game: the files are tiny hand-made samples of each container and
 format the engine reads (TIM2, IMG, MDT/MDS, PACK, DATA.HD4/DATA.DAT and a ZIP64 data.zip with
-Zstandard entries holding a glTF), placed at the paths the asset viewer looks for Max.
+Zstandard entries holding a glTF), placed at the paths the asset viewer looks for Max, plus a small map (map/t/t01/t01.*).
 
     python3 tools/make_test_data.py <output-dir>
 
@@ -273,6 +273,92 @@ def data_dat(files):
     return bytes(records + names), bytes(data)
 
 
+# --- map ---------------------------------------------------------------------------------
+
+MAP_SCRIPT = """// synthetic map: one part definition placed twice
+IMG "t01.img";
+PCP "t01_0.pcp";
+ACTIVE_LIGHT_SET 0;
+TIME_FLAG 1, 0;
+SKY_INFO 1, 0.0, 30.0;
+LIGHT_SET 0;
+ FOV;
+ BGCOLOR 40, 60, 90;
+ AMBIENT 64, 64, 64;
+ LIGHT 0, 0.0, 1.0, 0.0, 64, 64, 64, 1;
+ FOG_ENABLE 1;
+ FOG 100.0, 1000.0, 200, 200, 255;
+LIGHT_SET_END;
+CHARA_POS 0.0, 0.0, 0.0;
+PARTS "house";
+ LIGHT_FLAG 0, 0;
+ PIECE "box.mds";
+  PIECE_POS 10.0, 0.0, 0.0;
+  PIECE_ROT 0.0, 1.5707964, 0.0;
+ PIECE_END;
+ PIECE "lamp.mds";
+  PIECE_NAME "night_lamp";
+  PIECE_TIME 18.0, 6.0;
+ PIECE_END;
+ PIECE "floor_col.mds";
+ PIECE_END;
+ PIECE "box.mds";
+  PIECE_COL_TYPE 1;
+ PIECE_END;
+ FUNC_POINT 1;
+  FUNC_DATA "event", 1;
+  FUNC_NAME "door";
+  FUNC_POS 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 15.0, 15.0, 15.0;
+  FUNC_DATA_END;
+ FUNC_POINT_END;
+PARTS_END;
+MAP_PARTS "house_a";
+ PARTS_NAME "house";
+ PARTS_POS 100.0, 0.0, 0.0;
+ PARTS_ROT 0.0, 3.1415927, 0.0;
+MAP_PARTS_END;
+MAP_PARTS "house_b", 0;
+ PARTS_NAME "house";
+ PARTS_SCALE 2.0, 2.0, 2.0;
+MAP_PARTS_END;
+MAP_PARTS "nothing";
+ PARTS_NAME "no_such_part";
+MAP_PARTS_END;
+"""
+
+MODEL_LIST = """MDS "box.mds"; TYPE 0; MDS_END;
+MDS "lamp.mds"; MDS_END;
+MDS "floor_col.mds"; TYPE 1; FAR_CLIP 500.0, 1; MDS_END;
+"""
+
+SKY_INFO = """SKY_IMG 0, "sky0.img";
+SKY_MDS 0, "sky0.mds", 1.0;
+SKYB_MDS 0, "skyb0.mds", 0.5;
+SKY_ANIME 0, "arm", 2.0;
+"""
+
+
+def map_files(textures):
+    model_list = pack([
+        ("info.cfg", MODEL_LIST.encode()),
+        ("box.mds", mds()),
+        ("lamp.mds", mds()),
+        ("floor_col.mds", mds()),
+    ])
+    sky = pack([
+        ("info.cfg", SKY_INFO.encode()),
+        ("sky0.mds", mds()),
+        ("skyb0.mds", mds()),
+        ("sky0.img", textures),
+    ])
+    return [
+        ("map/t/t01/t01.map", MAP_SCRIPT.encode()),
+        ("map/t/t01/t01.ipk", pack([("t01.img", textures)])),
+        ("map/t/t01/t01.mpk", pack([("t01_0.pcp", model_list)])),
+        ("map/t/t01/t01.sky", sky),
+    ]
+
+
 # --- data.zip (ZIP64, Zstandard, 64-byte aligned payloads) ---------------------------------
 
 def png_rgba(width, height, rgba):
@@ -371,7 +457,7 @@ def main():
         ("c01f.bbp", bind_pose(COSTUME_FRAMES)),
         ("c01f.img", textures),
     ])
-    header, data = data_dat([("chara/c01_base.chr", character), ("mainchr/c01fuku1.chr", costume), ("chara/c99_binary.chr", binary_character), ("menu/sample.tm2", checker_tim2())])
+    header, data = data_dat([("chara/c01_base.chr", character), ("mainchr/c01fuku1.chr", costume), ("chara/c99_binary.chr", binary_character), ("menu/sample.tm2", checker_tim2())] + map_files(textures))
     with open(os.path.join(retail, "DATA.HD4"), "wb") as handle:
         handle.write(header)
     with open(os.path.join(retail, "DATA.DAT"), "wb") as handle:
