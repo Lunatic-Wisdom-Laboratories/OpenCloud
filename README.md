@@ -14,3 +14,5 @@ the original game files: a one-time converter turns the user's own disc into ope
 godot --headless --path opencloud-converter -- --source="/path/to/Dark Chronicle.iso" --out=/path/to/opencloud-data
 godot --path opencloud-godot -- --data=/path/to/opencloud-data
 ```
+
+See [THIRD_PARTY_NOTICE.md](THIRD_PARTY_NOTICE.md) for the projects used as references.
