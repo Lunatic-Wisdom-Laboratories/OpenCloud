@@ -454,8 +454,20 @@ public partial class AssetViewer : Node3D
             _status += $"\n  {bone} rest {Describe(rest)}";
             if (skeleton.GetParent()?.GetMeta(MdsModelLoader.BaseMatricesMeta, default(Variant)).Obj is Godot.Collections.Array bases && index < bases.Count)
                 _status += $"\n  {bone} bbp  {Describe(bases[index].AsTransform3D())}";
-            if (FindAll<Skeleton3D>(part).FirstOrDefault() is { } partSkeleton && partSkeleton.GetBoneCount() > 0)
-                _status += $"\n  part root rest {Describe(partSkeleton.GetBoneRest(0))}";
+            // The chain from Max's root to the bone, then every frame of the part with its local rest.
+            var chain = new List<int>();
+            for (int b = index; b >= 0; b = skeleton.GetBoneParent(b))
+                chain.Insert(0, b);
+            foreach (int b in chain)
+                _status += $"\n  max {skeleton.GetBoneName(b)}: {Describe(skeleton.GetBoneRest(b))}";
+            foreach (var partSkeleton in FindAll<Skeleton3D>(part))
+            {
+                for (int b = 0; b < partSkeleton.GetBoneCount(); b++)
+                {
+                    bool mesh = partSkeleton.GetChildren().OfType<BoneAttachment3D>().Any(a => a.BoneName == partSkeleton.GetBoneName(b));
+                    _status += $"\n  part {partSkeleton.GetBoneName(b)} (parent {partSkeleton.GetBoneParent(b)}{(mesh ? ", mesh" : string.Empty)}): {Describe(partSkeleton.GetBoneRest(b))}";
+                }
+            }
         }
         catch (Exception exception)
         {
