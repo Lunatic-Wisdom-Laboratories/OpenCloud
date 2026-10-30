@@ -20,12 +20,13 @@ public static class PlayerModels
     public sealed record Equipment(string Rig, IReadOnlyList<string> Rigs, IReadOnlyList<string> Skins, string? Hat);
 
     /// <summary>
-    /// Max in town: the town rig, then the field rig as a fallback, each retail or converted.
-    /// Clothes then footwear, as <c>SetupMainUnit</c> puts them on.
+    /// Max: the field rig first, whose deform frames the equipment files are made for (the
+    /// town rig <c>chara/c01_base</c> keeps a placeholder where the shoes go), then the town
+    /// rig, each retail or converted. Clothes then footwear, as <c>SetupMainUnit</c> puts them on.
     /// </summary>
     public static readonly Equipment Max = new(
         "max",
-        new[] { "chara/c01_base.chr", "chara/c01_base.gltf", "mainchr/c01_base2.chr", "mainchr/c01_base2.gltf" },
+        new[] { "mainchr/c01_base2.chr", "mainchr/c01_base2.gltf", "chara/c01_base.chr", "chara/c01_base.gltf" },
         new[] { "mainchr/c01fuku1.chr", "mainchr/c01sh001.chr" },
         "mainchr/c01ha001.chr");
 

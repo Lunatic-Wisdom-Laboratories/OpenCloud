@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using OpenCloud.Assets.Models;
 
@@ -46,15 +47,20 @@ public sealed class CharacterMotion
         _player = player;
         if (player == null)
             return;
-        // The first clip of a name wins, as the key search goes through the slots in order.
-        foreach (var library in player.GetAnimationLibraryList())
+        // The first KEY of a name wins, searching the slots in order and each slot in KEY order;
+        // Godot lists libraries and clips by name, so both orders are rebuilt here.
+        var libraries = player.GetAnimationLibraryList()
+            .OrderBy(l => int.TryParse(l.ToString().TrimStart('m'), out int slot) ? slot : int.MaxValue);
+        foreach (var library in libraries)
         {
             var animations = player.GetAnimationLibrary(library);
-            foreach (var clip in animations.GetAnimationList())
+            var clips = animations.GetAnimationList()
+                .Select(clip => (Name: clip.ToString(), Animation: animations.GetAnimation(clip)))
+                .OrderBy(c => c.Animation.HasMeta(MdsModelLoader.KeyIndexMeta) ? (int)c.Animation.GetMeta(MdsModelLoader.KeyIndexMeta) : int.MaxValue);
+            foreach (var (clip, animation) in clips)
             {
-                var animation = animations.GetAnimation(clip);
-                string game = animation.HasMeta("game_name") ? (string)animation.GetMeta("game_name") : clip.ToString();
-                _clips.TryAdd(game, library.IsEmpty ? clip.ToString() : $"{library}/{clip}");
+                string game = animation.HasMeta("game_name") ? (string)animation.GetMeta("game_name") : clip;
+                _clips.TryAdd(game, library.IsEmpty ? clip : $"{library}/{clip}");
             }
         }
     }

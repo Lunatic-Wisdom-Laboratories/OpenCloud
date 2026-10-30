@@ -72,6 +72,8 @@ public partial class TownScene : Node3D
         _environment = GetNode<WorldEnvironment>("WorldEnvironment");
         _fallbackLight = GetNode<DirectionalLight3D>("FallbackLight");
         _hud = GetNode<Label>("Hud/Info");
+        // The camera follows the drawn model, so it moves after the players have been drawn.
+        ProcessPriority = 10;
         PadInput.EnsureActions();
 
         string mapName = InitialMap;
@@ -240,7 +242,7 @@ public partial class TownScene : Node3D
         {
             LocalPlayer = player;
             player.Camera = _camera;
-            _camera.Follow = player;
+            _camera.Follow = player.Visual;
             _camera.Reset(position);
             if (_selfTestFrames > 0)
                 StartSelfTest(player);
@@ -338,7 +340,7 @@ public partial class TownScene : Node3D
         if (LocalPlayer is { } player)
         {
             var p = player.GlobalPosition;
-            text.AppendLine($"player {player.PeerId}: ({p.X:0}, {p.Y:0}, {p.Z:0}) {(player.IsLanded ? "on ground" : "in air")}, motion {player.Motion.Current ?? "-"}, camera angle {Mathf.RadToDeg(_camera.Angle):0}°");
+            text.AppendLine($"player {player.PeerId}: ({p.X:0}, {p.Y:0}, {p.Z:0}) {(player.IsLanded ? "on ground" : "in air")}, motion {player.Motion.Current ?? "-"} (step {player.Motion.Step:0.###}), camera angle {Mathf.RadToDeg(_camera.Angle):0}°");
         }
         int others = _players.GetChildCount() - (LocalPlayer != null ? 1 : 0);
         if (others > 0)

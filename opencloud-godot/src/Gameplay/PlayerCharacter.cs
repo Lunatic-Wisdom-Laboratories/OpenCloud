@@ -104,6 +104,9 @@ public partial class PlayerCharacter : CharacterBody3D
 
     public CharacterMotion Motion => _motion;
 
+    /// <summary>The drawn model (interpolated between game frames); the camera follows it.</summary>
+    public Node3D Visual => _model ?? this;
+
     public float Yaw => _yaw;
 
     public bool IsLanded => _landed;

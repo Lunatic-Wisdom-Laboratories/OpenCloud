@@ -127,9 +127,9 @@ sequences (`SEQ`), cloth.
 
 ## Walking in town
 
-`TownScene` loads a map and puts Max at its `CHARA_POS`, dressed as `SetupMainUnit` dresses him in
-town: the town rig `chara/c01_base` (or the field rig), clothes and shoes as costumes, the cap on
-the `hat` frame. Models go through `GameModelLoader`, so converted glTF files are picked up too.
+`TownScene` loads a map and puts Max at its `CHARA_POS`, dressed as `SetupMainUnit` dresses him:
+his field rig `mainchr/c01_base2` (the town rig `chara/c01_base` keeps a placeholder where the
+shoes go, so it is only the fallback), clothes and shoes as costumes, the cap on the `hat` frame. Models go through `GameModelLoader`, so converted glTF files are picked up too.
 
 WASD/arrows or the left stick move (Shift walks on the keyboard) · Q/E or L1/R1, J/L or the right
 stick turn the camera · I/K raise and lower it · C or L2 swings it behind Max · R back to the start ·
@@ -147,7 +147,8 @@ The controller follows the town loop's `CharaControl` and `EditMoveChara`, at th
   holds him for up to 20 frames. Walls stop a 13-unit cylinder that starts above the step height.
 - Motions change as `SetMotion` does: a motion already playing keeps its frame, a new one blends in
   over about 4.5 frames, a step is motion frames per game frame.
-- The model is drawn between the last two game frames, so the 30 Hz logic looks smooth.
+- The model is drawn between the last two game frames, and the camera follows the drawn model,
+  so the 30 Hz logic looks smooth.
 
 The camera is `CCameraControl` with the town parameters: it trails the look-at point (Max plus 30
 up) between 100 and 160 units away, at a height the right stick moves between -15 and 40 that
