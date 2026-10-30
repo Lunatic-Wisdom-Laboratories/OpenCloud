@@ -79,6 +79,9 @@ public partial class AssetViewer : Node3D
     private int _animation = -1;
     private float _speed = 1.0f;
     private (Skeleton3D Skeleton, int Bone, string Name)? _watchedBone;
+
+    /// <summary>Meta on the attachment that holds a part hung on a bone (SetRef).</summary>
+    private const string PartMeta = "opencloud_part";
     private bool _useKeyStep = true;
     private bool _paused;
 
@@ -194,14 +197,15 @@ public partial class AssetViewer : Node3D
         _players.Clear();
         _animations.Clear();
         _animation = -1;
-        _players.AddRange(FindAll<AnimationPlayer>(_modelRoot));
+        // Attached parts (the hat) play their own motion, as the game does, and are left out.
+        _players.AddRange(FindAll<AnimationPlayer>(_modelRoot).Where(p => !InPart(p)));
 
         if (_players.Count > 0)
         {
             var source = _players[0];
             foreach (var skeleton in FindAll<Skeleton3D>(_modelRoot))
             {
-                if (skeleton.GetParent() is not Node3D model || !model.IsVisibleInTree() ||
+                if (InPart(skeleton) || skeleton.GetParent() is not Node3D model || !model.IsVisibleInTree() ||
                     model.GetNodeOrNull<AnimationPlayer>(MdsModelLoader.AnimationPlayerName) != null ||
                     _players.Any(p => p.GetParent() == model || p.GetParent()?.IsAncestorOf(skeleton) == true))
                     continue;
@@ -249,7 +253,7 @@ public partial class AssetViewer : Node3D
     {
         foreach (var player in _players)
             player.Stop();
-        foreach (var skeleton in FindAll<Skeleton3D>(_modelRoot))
+        foreach (var skeleton in FindAll<Skeleton3D>(_modelRoot).Where(s => !InPart(s)))
             skeleton.ResetBonePoses();
         _animation = -1;
         _animationList.DeselectAll();
@@ -442,13 +446,16 @@ public partial class AssetViewer : Node3D
             return;
         try
         {
-            var attachment = new BoneAttachment3D { Name = MdsModelLoader.SafeNodeName("ref_" + bone) };
+            var attachment = new BoneAttachment3D { Name = MdsModelLoader.SafeNodeName("ref_" + bone) }.WithMeta(PartMeta, true);
             _watchedBone = (skeleton, BoneIndex(skeleton), bone);
             skeleton.AddChild(attachment);
             attachment.BoneName = skeleton.GetBoneName(BoneIndex(skeleton));
             var part = _loader.Load(path);
             attachment.AddChild(part);
             _status += $"\n{path}: on {bone}";
+            if (_loader.Mds.LastReport.Character is { } partInfo)
+                _status += $"\n  part info.cfg: {partInfo.Motions.Count} motion slots, keys {string.Join(" ", partInfo.Motions.Values.SelectMany(m => m.Keys).Select(k => k.Name))}";
+            _status += PlayPartMotion(part);
 
             // Diagnostics for placement: the bone's rest and bind (bbp) matrices, and the part's root rest.
             int index = BoneIndex(skeleton);
@@ -475,6 +482,47 @@ public partial class AssetViewer : Node3D
         {
             _status += $"\n{path}: {exception.Message}";
         }
+    }
+
+    /// <summary>
+    /// A part plays its own first KEY from its start, as <c>LoadChrFile</c> does once a pack is
+    /// read: its motion, not its model's rest, poses its frames.
+    /// </summary>
+    private static string PlayPartMotion(Node part)
+    {
+        var report = new StringBuilder();
+        foreach (var player in FindAll<AnimationPlayer>(part))
+        {
+            var first = player.GetAnimationLibraryList()
+                .OrderBy(l => l.ToString(), StringComparer.Ordinal)
+                .SelectMany(l => player.GetAnimationLibrary(l).GetAnimationList()
+                    .Select(a => (Name: l.ToString().Length == 0 ? a.ToString() : $"{l}/{a}", Clip: player.GetAnimationLibrary(l).GetAnimation(a))))
+                .OrderBy(a => a.Name.Split('/')[0], StringComparer.Ordinal)
+                .ThenBy(a => a.Clip.HasMeta(MdsModelLoader.KeyIndexMeta) ? (int)a.Clip.GetMeta(MdsModelLoader.KeyIndexMeta) : 0)
+                .Select(a => a.Name)
+                .FirstOrDefault();
+            if (first == null)
+                continue;
+            player.Play(first);
+            player.Seek(0, true);
+            report.Append($"\n  part motion {first}");
+            foreach (var skeleton in FindAll<Skeleton3D>(player.GetParent()))
+            {
+                for (int b = 0; b < skeleton.GetBoneCount(); b++)
+                    report.Append($"\n  part {skeleton.GetBoneName(b)} posed {Describe(skeleton.GetBonePose(b))}");
+            }
+        }
+        return report.Length > 0 ? report.ToString() : "\n  part has no motion";
+    }
+
+    private static bool InPart(Node node)
+    {
+        for (var n = node; n != null; n = n.GetParent())
+        {
+            if (n.HasMeta(PartMeta))
+                return true;
+        }
+        return false;
     }
 
     private static string Describe(Transform3D t)
