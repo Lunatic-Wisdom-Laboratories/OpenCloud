@@ -95,12 +95,12 @@ public sealed class MdsObject
     public required MdtModel? Model { get; init; }
 
     /// <summary>Name without the attribute text.</summary>
-    public string BaseName
+    public string BaseName => StripAttributes(Name);
+
+    /// <summary>A frame name without the attribute text after "--" (<c>mgFrameNameComp</c>).</summary>
+    public static string StripAttributes(string name)
     {
-        get
-        {
-            int attributes = Name.IndexOf("--", StringComparison.Ordinal);
-            return attributes < 0 ? Name : Name[..attributes];
-        }
+        int attributes = name.IndexOf("--", StringComparison.Ordinal);
+        return attributes < 0 ? name : name[..attributes];
     }
 }

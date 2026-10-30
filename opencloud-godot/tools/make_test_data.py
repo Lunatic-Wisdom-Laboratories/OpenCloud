@@ -109,18 +109,140 @@ def mdt():
     return header + b"".join(sections)
 
 
-def mds():
+FRAMES = [
+    # name, parent, translation, has model
+    ("root", -1, (0, 0, 0), False),
+    ("body--x", 0, (0, 0.5, 0), True),
+    ("hip", 0, (0, 0.5, 0), False),
+    ("arm", 2, (0, 0.5, 0), False),
+]
+
+
+# The costume names the same frames in another order, so its bones must be matched by name.
+COSTUME_FRAMES = [
+    ("root", -1, (0, 0, 0), False),
+    ("hip", 0, (0, 0.5, 0), False),
+    ("arm", 1, (0, 0.5, 0), False),
+    ("body", 0, (0, 0.5, 0), True),
+]
+
+
+def mds(frames=FRAMES):
     identity = (1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0)
     records = []
     model = mdt()
-    model_offset = 0x10 + 0x70 * 2
-    for index, (name, parent, translation, has_model) in enumerate(
-        [("root", -1, (0, 0, 0), False), ("body--x", 0, (0, 0.5, 0), True)]
-    ):
+    model_offset = 0x10 + 0x70 * len(frames)
+    for name, parent, translation, has_model in frames:
         records.append(struct.pack("<ii", 0, 0x70) + name.encode().ljust(32, b"\0")
                        + struct.pack("<ii", model_offset if has_model else 0, parent)
                        + struct.pack("<16f", *identity, *translation, 1))
     return struct.pack("<iiIi", 0, 0, len(records), 0x10) + b"".join(records) + model
+
+
+# --- Skinning and motion -------------------------------------------------------------------
+
+def key_lists(lists):
+    """Weight/motion container: 0x20 header {frame, target, type, 0, count, more} + 0x20 keys."""
+    out = bytearray()
+    for index, (frame, target, kind, keys) in enumerate(lists):
+        more = 1 if index + 1 < len(lists) else 0
+        out += struct.pack("<iiiiII8x", frame, target, kind, 0, len(keys), more)
+        for key_frame, value in keys:
+            out += struct.pack("<I12x4f", key_frame, *value)
+    return bytes(out)
+
+
+def weights():
+    """The body model (frame 1): bottom vertices on the hip, the top ones blended with the arm."""
+    return key_lists([
+        (1, 2, 20, [(0, (100, 0, 0, 0)), (1, (100, 0, 0, 0)), (2, (40, 0, 0, 0)), (3, (40, 0, 0, 0))]),
+        (1, 3, 20, [(2, (60, 0, 0, 0)), (3, (60, 0, 0, 0)), (4, (100, 0, 0, 0))]),
+    ])
+
+
+def costume_weights():
+    """The costume body (its frame 3) weighted to its hip (1) and arm (2)."""
+    return key_lists([
+        (3, 1, 20, [(0, (100, 0, 0, 0)), (1, (100, 0, 0, 0)), (2, (40, 0, 0, 0)), (3, (40, 0, 0, 0))]),
+        (3, 2, 20, [(2, (60, 0, 0, 0)), (3, (60, 0, 0, 0)), (4, (100, 0, 0, 0))]),
+    ])
+
+
+def costume_info_cfg():
+    """Read with the skin tags: MOTION slot, unused, bind pose, weights."""
+    return b'MODEL "c01f.mds";\nMOTION 0, "", "c01f.bbp", "c01f.wgt";\n'
+
+
+def bind_pose(frames=FRAMES):
+    """Scene-space matrix of every frame in the rest pose."""
+    world = []
+    for name, parent, translation, _ in frames:
+        base = world[parent][3] if parent >= 0 else (0, 0, 0)
+        world.append(((1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0),
+                      (base[0] + translation[0], base[1] + translation[1], base[2] + translation[2], 1)))
+    return b"".join(struct.pack("<16f", *[c for row in m for c in row]) for m in world)
+
+
+def motion():
+    """Arm swings about Z (keys are scalar-first quaternions), hip bobs; frames 0-20."""
+    import math
+
+    def about_z(degrees):
+        half = math.radians(degrees) / 2
+        return (math.cos(half), 0, 0, math.sin(half))
+
+    return key_lists([
+        (3, 0, 0, [(0, about_z(0)), (10, about_z(60)), (20, about_z(0))]),
+        (2, 0, 2, [(0, (0, 0.5, 0, 0)), (10, (0, 0.7, 0, 0)), (20, (0, 0.5, 0, 0))]),
+    ])
+
+
+def info_cfg():
+    text = """// synthetic character
+V2;
+NAME "test";
+VERTEX_ANIME "body";
+MODEL "c01_base.mds";
+MOTION 0, "c01_base.mot", "c01_base.bbp", "";
+KEY_START;
+KEY "\u7acb\u3061", 0, 10, 1.0;
+KEY "walk", 10, 20, 0.5;
+KEY_END;
+MOTION_END;
+"""
+    return text.encode("cp932")
+
+
+CHARACTER_TAGS = [
+    "V2", "NAME", "IMG", "IMG_END", "BODY_SIZE", "SCALE", "MATERIAL_ANIME", "POLY_NUM", "MODEL",
+    "SHADOW_MODEL", "OBJECT_NAME", "OBJECT_NAME2", "MOTION", "SHADOW_MOTION", "OUTLINE",
+    "VERTEX_ANIME", "SHAPE_ANIME", "KEY_START", "KEY", "KEY_END",
+]
+
+
+def info_cfg_binary():
+    """The same script in the "BIN" encoding: s16 tag index, s16 count, type bytes, values."""
+    def command(tag, *args):
+        out = bytearray(struct.pack("<hh", CHARACTER_TAGS.index(tag), len(args)))
+        for arg in args:
+            out.append(3 if isinstance(arg, str) else 2 if isinstance(arg, float) else 1)
+        out += b"\0" * (-len(out) % 4)
+        for arg in args:
+            if isinstance(arg, str):
+                out += align(arg.encode("cp932") + b"\0", 4)
+            else:
+                out += struct.pack("<f" if isinstance(arg, float) else "<i", arg)
+        return bytes(out)
+
+    return b"BIN\0" + b"".join([
+        command("V2"),
+        command("VERTEX_ANIME", "body"),
+        command("MODEL", "c01_base.mds"),
+        command("MOTION", 0, "c01_base.mot", "c01_base.bbp", ""),
+        command("KEY_START"),
+        command("KEY", "\u7acb\u3061", 0, 10, 1.0),
+        command("KEY_END"),
+    ]) + struct.pack("<h", -1)
 
 
 # --- PACK and DATA.HD4 / DATA.DAT ---------------------------------------------------------
@@ -230,8 +352,26 @@ def main():
     os.makedirs(converted, exist_ok=True)
 
     textures = img_archive([("tex_checker", checker_tim2()), ("tex_alpha", alpha_tim2())])
-    character = pack([("c01_base.mds", mds()), ("c01_base.img", textures)])
-    header, data = data_dat([("chara/c01_base.chr", character), ("menu/sample.tm2", checker_tim2())])
+    character = pack([
+        ("info.cfg", info_cfg()),
+        ("c01_base.mds", mds()),
+        ("c01_base.wgt", weights()),
+        ("c01_base.mot", motion()),
+        ("c01_base.bbp", bind_pose()),
+        ("c01_base.img", textures),
+    ])
+    binary_character = pack([(name, info_cfg_binary() if name == "info.cfg" else blob) for name, blob in [
+        ("info.cfg", b""), ("c01_base.mds", mds()), ("c01_base.wgt", weights()),
+        ("c01_base.mot", motion()), ("c01_base.bbp", bind_pose()), ("c01_base.img", textures),
+    ]])
+    costume = pack([
+        ("info.cfg", costume_info_cfg()),
+        ("c01f.mds", mds(COSTUME_FRAMES)),
+        ("c01f.wgt", costume_weights()),
+        ("c01f.bbp", bind_pose(COSTUME_FRAMES)),
+        ("c01f.img", textures),
+    ])
+    header, data = data_dat([("chara/c01_base.chr", character), ("mainchr/c01fuku1.chr", costume), ("chara/c99_binary.chr", binary_character), ("menu/sample.tm2", checker_tim2())])
     with open(os.path.join(retail, "DATA.HD4"), "wb") as handle:
         handle.write(header)
     with open(os.path.join(retail, "DATA.DAT"), "wb") as handle:
