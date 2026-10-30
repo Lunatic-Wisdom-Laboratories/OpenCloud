@@ -77,7 +77,7 @@ Lists every converted map (`map/**/*.map.json`) of the mounted data and shows th
 in the asset viewer.
 
 PgDn/PgUp or click the list: map · F frame · R reload · C collision · P function points ·
-H pieces the script hides · L map lighting on/off · `[` `]` game clock -/+ 1 h · Tab asset viewer ·
+H pieces the script hides · L map lighting on/off · `[` `]` game clock -/+ 1 h · Tab town mode on this map ·
 F1 help. The camera is the asset viewer's.
 
 ## Maps
@@ -146,7 +146,8 @@ shoes go, so it is only the fallback), clothes and shoes as costumes, the cap on
 
 WASD/arrows or the left stick move (Shift walks on the keyboard) · Q/E or L1/R1, J/L or the right
 stick turn the camera · I/K raise and lower it · C or L2 swings it behind Max · R back to the start ·
-Tab map viewer · F1 help.
+Tab asset viewer · F1 help. Tab in the map viewer opens this scene on the map being shown, so Tab
+cycles asset viewer → map viewer → town → asset viewer.
 
 The controller follows the town loop's `CharaControl` and `EditMoveChara`, at the game's 30 Hz:
 

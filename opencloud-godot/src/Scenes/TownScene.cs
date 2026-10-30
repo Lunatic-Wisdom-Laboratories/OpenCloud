@@ -91,6 +91,8 @@ public partial class TownScene : Node3D
                 double.TryParse(argument["--net-report=".Length..], System.Globalization.CultureInfo.InvariantCulture, out _reportAfter);
         }
 
+        mapName = ViewerSwitch.TakeMap(mapName);
+
         var paths = GameDataPaths.Resolve(DataPaths);
         _vfs = GameDataPaths.MountAll(paths, _errors);
         _models = new ModelLoader(_vfs);
@@ -301,8 +303,8 @@ public partial class TownScene : Node3D
                 _camera.Reset(LocalPlayer.GlobalPosition);
                 break;
             case Key.Tab:
-                GetTree().ChangeSceneToFile("res://src/Scenes/MapViewer.tscn");
-                break;
+                ViewerSwitch.Next(this, ViewerSwitch.AssetViewer);
+                return;
             default:
                 return;
         }
@@ -351,7 +353,7 @@ public partial class TownScene : Node3D
                 text.AppendLine(note);
             text.AppendLine();
             text.AppendLine("WASD/arrows or left stick move (Shift walks) · Q/E or L1/R1 and J/L or right stick turn the camera · I/K raise/lower");
-            text.AppendLine("C or L2 camera behind · R back to start · Tab map viewer · F1 help");
+            text.AppendLine("C or L2 camera behind · R back to start · Tab asset viewer · F1 help");
         }
         _hud.Text = text.ToString();
     }
