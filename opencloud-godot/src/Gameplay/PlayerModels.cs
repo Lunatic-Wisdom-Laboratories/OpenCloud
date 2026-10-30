@@ -83,6 +83,13 @@ public static class PlayerModels
     /// <summary><c>SetRef</c>: hangs a part on a named frame of the character's skeleton.</summary>
     private static void AttachToFrame(ModelLoader loader, Node3D root, Node3D? rig, string path, string frame, List<string> notes)
     {
+        // Hung once the character is in the scene, as the asset viewer hangs it.
+        if (!root.IsInsideTree())
+        {
+            root.Connect(Node.SignalName.TreeEntered, Callable.From(() => AttachToFrame(loader, root, rig, path, frame, notes)),
+                (uint)GodotObject.ConnectFlags.OneShot);
+            return;
+        }
         // The rig's own skeleton, the one its motions pose; the pack also holds hidden models
         // (shadow, LOD) with the same frames that never move.
         var skeletons = FindAll<Skeleton3D>(root).Where(IsShown)
@@ -96,6 +103,7 @@ public static class PlayerModels
             try
             {
                 var attachment = new BoneAttachment3D { Name = NodeNames.Safe("ref_" + frame) };
+                attachment.SetMeta(PartFrameMeta, frame);
                 skeleton.AddChild(attachment);
                 attachment.BoneName = skeleton.GetBoneName(bone);
                 var part = loader.Load(path);
@@ -111,6 +119,32 @@ public static class PlayerModels
             }
             return;
         }
+    }
+
+    private const string PartFrameMeta = "opencloud_part_frame";
+
+    /// <summary>
+    /// Where a hung part sits right now, relative to the character: the frame's posed rotation
+    /// and the part's meshes. Compared with the asset viewer's "hat now" line.
+    /// </summary>
+    public static IEnumerable<string> DescribeParts(Node3D model)
+    {
+        var inverse = model.GlobalTransform.AffineInverse();
+        foreach (var attachment in FindAll<BoneAttachment3D>(model).Where(a => a.HasMeta(PartFrameMeta)))
+        {
+            string frame = (string)attachment.GetMeta(PartFrameMeta);
+            if (attachment.GetParent() is Skeleton3D skeleton && skeleton.FindBone(attachment.BoneName) is var bone and >= 0)
+                yield return $"  {frame} now {Describe(skeleton.GetBoneGlobalPose(bone))}";
+            yield return $"  {frame} attachment {Describe(inverse * attachment.GlobalTransform)}";
+            foreach (var mesh in FindAll<MeshInstance3D>(attachment).Take(2))
+                yield return $"  {frame} mesh {mesh.Name} {Describe(inverse * mesh.GlobalTransform)}";
+        }
+    }
+
+    private static string Describe(Transform3D t)
+    {
+        var euler = t.Basis.GetEuler() * (180.0f / Mathf.Pi);
+        return $"pos ({t.Origin.X:0.#}, {t.Origin.Y:0.#}, {t.Origin.Z:0.#}) rot ({euler.X:0.#}, {euler.Y:0.#}, {euler.Z:0.#})";
     }
 
     /// <summary>Starts the part's first motion; returns its name, or null when it has none.</summary>

@@ -343,6 +343,11 @@ public partial class TownScene : Node3D
         {
             var p = player.GlobalPosition;
             text.AppendLine($"player {player.PeerId}: ({p.X:0}, {p.Y:0}, {p.Z:0}) {(player.IsLanded ? "on ground" : "in air")}, motion {player.Motion.Current ?? "-"} (step {player.Motion.Step:0.###}), camera angle {Mathf.RadToDeg(_camera.Angle):0}°");
+            if (_showHelp && player.Visual is { } visual)
+            {
+                foreach (var line in PlayerModels.DescribeParts(visual))
+                    text.AppendLine(line);
+            }
         }
         int others = _players.GetChildCount() - (LocalPlayer != null ? 1 : 0);
         if (others > 0)
