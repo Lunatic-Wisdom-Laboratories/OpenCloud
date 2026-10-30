@@ -16,7 +16,10 @@ namespace OpenCloud.Scenes;
 /// data, loads Max by default and lets any model of the data be browsed with a free camera.
 ///
 /// Keys: PageDown/PageUp next/previous model, Home back to Max, F reframe, B toggle bone
-/// markers, R reload, F1 toggle help. Camera: see <see cref="FreeCamera"/>.
+/// markers, R reload, F1 toggle help. Animations (motions of a character pack or glTF clips)
+/// are listed on the right: click one or use Up/Down, Space pauses, Left/Right step one motion
+/// frame while paused, -/= change the speed, T toggles the game's per-action KEY step.
+/// Camera: see <see cref="FreeCamera"/>.
 /// </summary>
 public partial class AssetViewer : Node3D
 {
@@ -62,12 +65,23 @@ public partial class AssetViewer : Node3D
     private Node3D _modelRoot = null!;
     private FreeCamera _camera = null!;
     private Label _hud = null!;
+    private ItemList _animationList = null!;
+
+    /// <summary>Animations of the loaded models, by full name ("library/clip").</summary>
+    private readonly List<string> _animations = new();
+    private readonly List<AnimationPlayer> _players = new();
+    private int _animation = -1;
+    private float _speed = 1.0f;
+    private bool _useKeyStep = true;
+    private bool _paused;
 
     public override void _Ready()
     {
         _modelRoot = GetNode<Node3D>("ModelRoot");
         _camera = GetNode<FreeCamera>("FreeCamera");
         _hud = GetNode<Label>("Hud/Info");
+        _animationList = GetNode<ItemList>("Hud/Animations");
+        _animationList.ItemSelected += index => PlayAnimation((int)index);
 
         var paths = GameDataPaths.Resolve(DataPaths);
         _vfs = GameDataPaths.MountAll(paths, _errors);
@@ -126,7 +140,159 @@ public partial class AssetViewer : Node3D
                 _showHelp = !_showHelp;
                 UpdateHud();
                 break;
+            case Key.Down:
+                StepAnimation(1);
+                break;
+            case Key.Up:
+                StepAnimation(-1);
+                break;
+            case Key.Space:
+                _paused = !_paused;
+                ApplySpeed();
+                break;
+            case Key.Right when _paused:
+                SeekFrames(1);
+                break;
+            case Key.Left when _paused:
+                SeekFrames(-1);
+                break;
+            case Key.Minus:
+                _speed = Math.Max(_speed / 2.0f, 1.0f / 16.0f);
+                ApplySpeed();
+                break;
+            case Key.Equal:
+                _speed = Math.Min(_speed * 2.0f, 16.0f);
+                ApplySpeed();
+                break;
+            case Key.T:
+                _useKeyStep = !_useKeyStep;
+                ApplySpeed();
+                break;
+            default:
+                return;
         }
+        GetViewport().SetInputAsHandled();
+    }
+
+    /// <summary>
+    /// Collects the animation players of the loaded models. A model with a skeleton but no
+    /// motions of its own (an outfit shown over Max's rig) shares the first player's libraries,
+    /// so its bones follow the same clips wherever their names match.
+    /// </summary>
+    private void RefreshAnimations()
+    {
+        _players.Clear();
+        _animations.Clear();
+        _animation = -1;
+        _players.AddRange(FindAll<AnimationPlayer>(_modelRoot));
+
+        if (_players.Count > 0)
+        {
+            var source = _players[0];
+            foreach (var skeleton in FindAll<Skeleton3D>(_modelRoot))
+            {
+                if (skeleton.GetParent() is not Node3D model || !model.IsVisibleInTree() ||
+                    model.GetNodeOrNull<AnimationPlayer>(MdsModelLoader.AnimationPlayerName) != null ||
+                    _players.Any(p => p.GetParent() == model || p.GetParent()?.IsAncestorOf(skeleton) == true))
+                    continue;
+
+                var shared = new AnimationPlayer { Name = MdsModelLoader.AnimationPlayerName };
+                foreach (var library in source.GetAnimationLibraryList())
+                    shared.AddAnimationLibrary(library, source.GetAnimationLibrary(library));
+                model.AddChild(shared);
+                _players.Add(shared);
+            }
+            // Character clips keep their KEY order; others (glTF) stay in name order.
+            _animations.AddRange(source.GetAnimationList()
+                .Where(a => a != "RESET")
+                .Select((name, order) => (name, order))
+                .OrderBy(a => a.name.Split('/')[0], StringComparer.Ordinal)
+                .ThenBy(a => source.GetAnimation(a.name) is { } clip && clip.HasMeta(MdsModelLoader.KeyIndexMeta) ? (int)clip.GetMeta(MdsModelLoader.KeyIndexMeta) : a.order)
+                .Select(a => a.name));
+        }
+
+        _animationList.Clear();
+        foreach (var name in _animations)
+            _animationList.AddItem(DisplayName(_players[0], name));
+        _animationList.Visible = _animations.Count > 0;
+
+        if (_animations.Count > 0)
+            PlayAnimation(0);
+    }
+
+    private static string DisplayName(AnimationPlayer player, string name)
+    {
+        var animation = player.GetAnimation(name);
+        string frames = $"{Mathf.RoundToInt(animation.Length * MotionAnimationBuilder.FramesPerSecond)}f";
+        return animation.HasMeta("step") ? $"{name}  ({frames}, step {(float)animation.GetMeta("step"):0.###})" : $"{name}  ({frames})";
+    }
+
+    public override void _Process(double delta)
+    {
+        // Keep the frame counter live while a clip plays.
+        if (_animation >= 0 && !_paused)
+            UpdateHud();
+    }
+
+    private void StepAnimation(int direction)
+    {
+        if (_animations.Count == 0)
+            return;
+        PlayAnimation((_animation + direction + _animations.Count) % _animations.Count);
+    }
+
+    private void PlayAnimation(int index)
+    {
+        if (index < 0 || index >= _animations.Count)
+            return;
+        _animation = index;
+        string name = _animations[index];
+        foreach (var player in _players)
+        {
+            if (!player.HasAnimation(name))
+                continue;
+            // Bones a clip does not key keep their authored pose, not the last clip's.
+            foreach (var skeleton in FindAll<Skeleton3D>(player.GetParent()))
+                skeleton.ResetBonePoses();
+            player.Play(name);
+            player.Seek(0, true);
+        }
+        if (_animationList.IsAnythingSelected() is false || !_animationList.IsSelected(index))
+            _animationList.Select(index);
+        _animationList.EnsureCurrentIsVisible();
+        ApplySpeed();
+    }
+
+    /// <summary>
+    /// Plays at the KEY's step (motion frames per game frame) times the viewer speed, or paused.
+    /// </summary>
+    private void ApplySpeed()
+    {
+        foreach (var player in _players)
+        {
+            float step = 1.0f;
+            if (_useKeyStep && player.CurrentAnimation is { Length: > 0 } current && player.HasAnimation(current))
+            {
+                var animation = player.GetAnimation(current);
+                if (animation.HasMeta("step"))
+                    step = Math.Max((float)animation.GetMeta("step"), 0.0f);
+            }
+            player.SpeedScale = _paused ? 0.0f : step * _speed;
+        }
+        UpdateHud();
+    }
+
+    private void SeekFrames(int frames)
+    {
+        foreach (var player in _players)
+        {
+            if (player.CurrentAnimation is not { Length: > 0 })
+                continue;
+            double length = player.CurrentAnimationLength;
+            double time = player.CurrentAnimationPosition + frames / MotionAnimationBuilder.FramesPerSecond;
+            player.Seek(length > 0 ? Mathf.PosMod(time, length) : 0, true);
+        }
+        UpdateHud();
     }
 
     private void Step(int direction)
@@ -153,7 +319,10 @@ public partial class AssetViewer : Node3D
         {
             var outfit = _loader!.FindFirst(MaxOutfitCandidates);
             if (outfit != null && path.Contains("base", StringComparison.OrdinalIgnoreCase))
+            {
                 AddModel(outfit);
+                RefreshAnimations();
+            }
             FrameModel();
             UpdateHud();
         }
@@ -165,6 +334,7 @@ public partial class AssetViewer : Node3D
         _current = _models.FindIndex(m => VfsPath.Comparer.Equals(m, VfsPath.Normalize(path)));
         _status = string.Empty;
         bool loaded = AddModel(path);
+        RefreshAnimations();
         FrameModel();
         UpdateHud();
         return loaded;
@@ -187,7 +357,11 @@ public partial class AssetViewer : Node3D
             if (VfsPath.GetExtension(path) is not ("gltf" or "glb"))
             {
                 var r = _loader.Mds.LastReport;
-                report.Append($"\n  frames {r.Objects}, meshes {r.Meshes}, triangles {r.Triangles}");
+                report.Append($"\n  frames {r.Objects}, meshes {r.Meshes} ({r.SkinnedMeshes} skinned), triangles {r.Triangles}, animations {r.Animations}");
+                if (r.Character != null)
+                    report.Append($"\n  info.cfg: {r.Character.Name}, model {r.Character.Model}, {r.Character.Motions.Count} motion slots, skinned frames: {string.Join(" ", r.Character.SkinnedFrames)}");
+                foreach (var note in r.Notes)
+                    report.Append($"\n  {note}");
                 if (r.SkippedPrimitives > 0)
                     report.Append($", skipped point/line primitives {r.SkippedPrimitives}");
                 if (r.MissingTextures.Count > 0)
@@ -207,6 +381,11 @@ public partial class AssetViewer : Node3D
 
     private void ClearModel()
     {
+        _players.Clear();
+        _animations.Clear();
+        _animation = -1;
+        _animationList.Clear();
+        _animationList.Visible = false;
         foreach (var child in _modelRoot.GetChildren())
         {
             _modelRoot.RemoveChild(child);
@@ -276,10 +455,18 @@ public partial class AssetViewer : Node3D
             text.AppendLine($"Model {(_current >= 0 ? _current + 1 : 0)}/{_models.Count}");
         if (_status.Length > 0)
             text.AppendLine(_status);
+        if (_animation >= 0 && _players.Count > 0)
+        {
+            var player = _players[0];
+            int frame = Mathf.RoundToInt(player.CurrentAnimationPosition * MotionAnimationBuilder.FramesPerSecond);
+            text.AppendLine($"Animation {_animation + 1}/{_animations.Count}: {_animations[_animation]}  frame {frame}" +
+                            $"  speed x{_speed:0.###}{(_useKeyStep ? " * KEY step" : string.Empty)}{(_paused ? "  [paused]" : string.Empty)}");
+        }
         if (_showHelp)
         {
             text.AppendLine();
             text.AppendLine("PgDn/PgUp browse  Home Max  F frame  B bones  R reload  F1 help");
+            text.AppendLine("Up/Down animation  Space pause  Left/Right frame step  -/= speed  T KEY step");
             text.AppendLine("RMB look  WASD move  Q/E down/up  Shift fast  Wheel speed");
         }
         _hud.Text = text.ToString();

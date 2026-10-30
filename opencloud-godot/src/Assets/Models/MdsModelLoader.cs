@@ -13,15 +13,17 @@ namespace OpenCloud.Assets.Models;
 /// Converts retail MDS scenes into Godot nodes at run time.
 ///
 /// Every MDS object becomes a bone of one <see cref="Skeleton3D"/> (its rest pose is the
-/// object's local matrix, so animation in a later stage drives these bones), and every object
-/// that owns an MDT model gets a <see cref="MeshInstance3D"/> attached to its bone. MDT vertices
-/// are stored in their object's space, so the rest pose shows the model as authored.
+/// object's local matrix, and motions drive these bones), and every object that owns an MDT
+/// model gets a <see cref="MeshInstance3D"/>. MDT vertices are stored in their object's space.
+/// A rigid model is attached to its bone; a skinned model (<see cref="SkinningData"/>) is a
+/// child of the skeleton with a <see cref="Skin"/> that blends each vertex between up to four
+/// bones, as <c>mgCVisualMotionMDT</c> does on VU1.
 ///
 /// The game's axes and units already match Godot's (right-handed, +Y up). Row-vector game
 /// matrices map row i to basis column i. Game front faces are counter-clockwise; Godot's are
 /// clockwise, so triangles are emitted in reverse order.
 /// </summary>
-public sealed class MdsModelLoader
+public sealed partial class MdsModelLoader
 {
     private readonly VirtualFileSystem _vfs;
 
@@ -35,6 +37,10 @@ public sealed class MdsModelLoader
     {
         public int Objects;
         public int Meshes;
+        public int SkinnedMeshes;
+        public int Animations;
+        public CharacterInfo? Character;
+        public readonly List<string> Notes = new();
         public int Triangles;
         public int SkippedPrimitives;
         public readonly SortedSet<string> MissingTextures = new(StringComparer.Ordinal);
@@ -58,7 +64,7 @@ public sealed class MdsModelLoader
             if (sharedTextures != null)
                 textures.AddRange(sharedTextures);
             LoadSiblingTextures(path, textures);
-            return BuildScene(MdsFile.Parse(data), VfsPath.GetFileName(path), textures);
+            return BuildScene(MdsFile.Parse(data), VfsPath.GetFileName(path), textures, LoadSiblingSkinning(path));
         }
 
         var pack = _vfs.TryOpenPack(path)
@@ -77,6 +83,13 @@ public sealed class MdsModelLoader
             textures.AddRange(sharedTextures);
         foreach (var entry in pack.Entries)
             TryAddTextures(textures, entry.Name, pack.GetSpan(entry));
+
+        if (pack.TryRead(CharacterInfo.FileName) is { } info)
+        {
+            var character = TryLoadCharacter(pack, name, info, textures, depth);
+            if (character != null)
+                return character;
+        }
 
         var root = new Node3D { Name = SafeNodeName(name) };
         foreach (var entry in pack.Entries)
@@ -104,6 +117,26 @@ public sealed class MdsModelLoader
         return root;
     }
 
+    /// <summary>
+    /// A loose MDS has no info script naming its skinned frames, so every frame with weights in
+    /// the <c>.wgt</c> beside it is skinned.
+    /// </summary>
+    private SkinningData? LoadSiblingSkinning(string mdsPath)
+    {
+        var weights = _vfs.TryRead(VfsPath.ChangeExtension(mdsPath, "wgt"));
+        if (weights == null)
+            return null;
+        try
+        {
+            return new SkinningData { WeightLists = MotionFile.Parse(weights) };
+        }
+        catch (System.IO.InvalidDataException exception)
+        {
+            GD.PushWarning($"Weights for '{mdsPath}': {exception.Message}");
+            return null;
+        }
+    }
+
     private void LoadSiblingTextures(string mdsPath, TextureLibrary textures)
     {
         string stem = VfsPath.ChangeExtension(mdsPath, string.Empty).TrimEnd('.');
@@ -115,7 +148,7 @@ public sealed class MdsModelLoader
         }
     }
 
-    private static void TryAddTextures(TextureLibrary textures, string name, ReadOnlySpan<byte> data)
+    internal static void TryAddTextures(TextureLibrary textures, string name, ReadOnlySpan<byte> data)
     {
         try
         {
@@ -130,11 +163,14 @@ public sealed class MdsModelLoader
         }
     }
 
+    /// <summary>Name of the skeleton node inside every scene this loader builds.</summary>
+    public const string SkeletonNodeName = "Skeleton";
+
     /// <summary>Builds the node tree of one MDS scene.</summary>
-    public Node3D BuildScene(MdsFile mds, string name, TextureLibrary textures)
+    public Node3D BuildScene(MdsFile mds, string name, TextureLibrary textures, SkinningData? skinning = null)
     {
         var root = new Node3D { Name = SafeNodeName(name) };
-        var skeleton = new Skeleton3D { Name = "Skeleton" };
+        var skeleton = new Skeleton3D { Name = SkeletonNodeName };
         root.AddChild(skeleton);
 
         var usedNames = new HashSet<string>(StringComparer.Ordinal);
@@ -150,6 +186,7 @@ public sealed class MdsModelLoader
             boneNames[obj.Index] = boneName;
             skeleton.AddBone(boneName);
         }
+        root.SetMeta(BoneNamesMeta, boneNames);
 
         foreach (var obj in mds.Objects)
         {
@@ -166,17 +203,59 @@ public sealed class MdsModelLoader
             if (obj.Model == null || obj.Model.Primitives.Count == 0)
                 continue;
 
-            var mesh = BuildMesh(obj.Model, textures);
+            var weights = skinning?.WeightsFor(obj, obj.Model.Positions.Length);
+            var mesh = BuildMesh(obj.Model, textures, weights);
             if (mesh == null)
                 continue;
+            LastReport.Meshes++;
+
+            if (weights != null)
+            {
+                skeleton.AddChild(new MeshInstance3D
+                {
+                    Name = SafeNodeName(boneNames[obj.Index]),
+                    Mesh = mesh,
+                    Skin = BuildSkin(skeleton, obj.Index, weights, skinning!.BindPose),
+                    Skeleton = new NodePath(".."),
+                });
+                LastReport.SkinnedMeshes++;
+                continue;
+            }
 
             var attachment = new BoneAttachment3D { Name = SafeNodeName(boneNames[obj.Index]) };
             skeleton.AddChild(attachment);
             attachment.BoneName = boneNames[obj.Index];
             attachment.AddChild(new MeshInstance3D { Name = "Mesh", Mesh = mesh });
-            LastReport.Meshes++;
         }
         return root;
+    }
+
+    /// <summary>Meta key on a built scene holding the bone name of each MDS object, by index.</summary>
+    public const string BoneNamesMeta = "opencloud_bone_names";
+
+    /// <summary>
+    /// Bind poses of a skinned model. The game moves each vertex by
+    /// <c>bone_now * inverse(bone_base) * model_base</c> (<c>CreateExtRenderInfoPacket</c>),
+    /// where the base matrices are the frames' scene-space matrices at load, replaced by a
+    /// motion's bind-pose file when one is loaded. Godot applies <c>bone_pose * bind</c>, so
+    /// the bind is everything after the posed bone.
+    /// </summary>
+    private static Skin BuildSkin(Skeleton3D skeleton, int modelFrame, VertexWeights weights, IReadOnlyList<System.Numerics.Matrix4x4>? bindPose)
+    {
+        Transform3D Base(int frame) => bindPose != null && frame < bindPose.Count
+            ? ToTransform(bindPose[frame])
+            : skeleton.GetBoneGlobalRest(frame);
+
+        var modelBase = Base(modelFrame);
+        var skin = new Skin();
+        foreach (int bone in weights.Bones)
+        {
+            if (bone >= 0 && bone < skeleton.GetBoneCount())
+                skin.AddBind(bone, Base(bone).AffineInverse() * modelBase);
+            else
+                skin.AddBind(0, Transform3D.Identity);
+        }
+        return skin;
     }
 
     /// <summary>Converts a game row-vector matrix into a Godot transform.</summary>
@@ -190,6 +269,7 @@ public sealed class MdsModelLoader
         public readonly List<Vector3> Normals = new();
         public readonly List<Vector2> Uvs = new();
         public readonly List<Color> Colours = new();
+        public readonly List<int> PositionIndices = new();
         public bool HasColours;
     }
 
@@ -197,7 +277,7 @@ public sealed class MdsModelLoader
     /// Expands one MDT model into an <see cref="ArrayMesh"/> with one surface per material.
     /// Triangle lists, strips and fans become triangles; point and line primitives are skipped.
     /// </summary>
-    private ArrayMesh? BuildMesh(MdtModel model, TextureLibrary textures)
+    private ArrayMesh? BuildMesh(MdtModel model, TextureLibrary textures, VertexWeights? weights)
     {
         // Colours are floats; if any exceeds 1 the model uses the GS scale where 0x80 is 1.0.
         float colourScale = model.Colours.Any(c => c.X > 1.001f || c.Y > 1.001f || c.Z > 1.001f || c.W > 1.001f) ? 1.0f / 128.0f : 1.0f;
@@ -230,6 +310,7 @@ public sealed class MdsModelLoader
                     surface.Normals.RemoveRange(surface.Normals.Count - 3, 3);
                     surface.Uvs.RemoveRange(surface.Uvs.Count - 3, 3);
                     surface.Colours.RemoveRange(surface.Colours.Count - 3, 3);
+                    surface.PositionIndices.RemoveRange(surface.PositionIndices.Count - 3, 3);
                     continue;
                 }
                 FixMissingNormals(surface, primitive.HasNormal && model.Normals.Length > 0);
@@ -250,10 +331,33 @@ public sealed class MdsModelLoader
             arrays[(int)Mesh.ArrayType.TexUV] = surface.Uvs.ToArray();
             if (surface.HasColours)
                 arrays[(int)Mesh.ArrayType.Color] = surface.Colours.ToArray();
+            if (weights != null)
+                AddSkinArrays(arrays, surface.PositionIndices, weights);
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
             mesh.SurfaceSetMaterial(mesh.GetSurfaceCount() - 1, CreateMaterial(model, materialIndex, textures, surface.HasColours));
         }
         return mesh.GetSurfaceCount() > 0 ? mesh : null;
+    }
+
+    /// <summary>Gives every corner the bones and weights of its source vertex position.</summary>
+    private static void AddSkinArrays(Godot.Collections.Array arrays, List<int> positions, VertexWeights weights)
+    {
+        const int n = VertexWeights.MaxInfluences;
+        var bones = new int[positions.Count * n];
+        var blend = new float[positions.Count * n];
+        for (int corner = 0; corner < positions.Count; corner++)
+        {
+            int position = positions[corner];
+            if (position < 0 || position >= weights.VertexCount)
+            {
+                blend[corner * n] = 1.0f;
+                continue;
+            }
+            Array.Copy(weights.BoneSlots, position * n, bones, corner * n, n);
+            Array.Copy(weights.Weights, position * n, blend, corner * n, n);
+        }
+        arrays[(int)Mesh.ArrayType.Bones] = bones;
+        arrays[(int)Mesh.ArrayType.Weights] = blend;
     }
 
     /// <summary>Corner triples of a primitive, in the game's (counter-clockwise) winding.</summary>
@@ -282,6 +386,7 @@ public sealed class MdsModelLoader
     {
         bool valid = true;
         int position = primitive.PositionIndex(vertex);
+        surface.PositionIndices.Add(position);
         surface.Positions.Add(TryGet(model.Positions, position, ref valid) is { } p ? new Vector3(p.X, p.Y, p.Z) : Vector3.Zero);
 
         int normal = primitive.NormalIndex(vertex);
