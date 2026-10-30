@@ -68,6 +68,11 @@ public sealed partial class MdsModelLoader
         var model = BuildScene(mds, info.Model, textures, skinning);
         root.AddChild(model);
 
+        // What a costume (LoadSkin) needs from this character: its deform frames and base matrices.
+        model.SetMeta(DeformFramesMeta, info.SkinnedFrames.ToArray());
+        var skeleton = model.GetNode<Skeleton3D>(SkeletonNodeName);
+        model.SetMeta(BaseMatricesMeta, new Godot.Collections.Array(BaseMatrices(skeleton, bindPose).Select(t => Variant.From(t))));
+
         if (motions.Count > 0)
             model.AddChild(BuildAnimationPlayer(mds, model, motions));
 

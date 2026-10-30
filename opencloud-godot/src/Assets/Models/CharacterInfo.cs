@@ -16,6 +16,12 @@ public sealed class MotionSet
     public required int Id { get; init; }
     public required string? MotionFile { get; init; }
     public required string? BindPoseFile { get; init; }
+
+    /// <summary>
+    /// Fourth argument: unused by <c>_MOTION</c>, but a costume read with the skin tags
+    /// (<c>_SKIN_MOTION</c>) takes its weights from it.
+    /// </summary>
+    public string? WeightFile { get; init; }
     public List<MotionKeyInterval> Keys { get; } = new();
 }
 
@@ -99,6 +105,7 @@ public sealed class CharacterInfo
                         Id = motionId,
                         MotionFile = NonEmpty(command.Arg(1).AsString),
                         BindPoseFile = NonEmpty(command.Arg(2).AsString),
+                        WeightFile = NonEmpty(command.Arg(3).AsString),
                     };
                     break;
                 case "KEY_START":

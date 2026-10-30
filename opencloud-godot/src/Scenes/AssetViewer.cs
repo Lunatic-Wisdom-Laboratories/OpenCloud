@@ -320,7 +320,8 @@ public partial class AssetViewer : Node3D
             var outfit = _loader!.FindFirst(MaxOutfitCandidates);
             if (outfit != null && path.Contains("base", StringComparison.OrdinalIgnoreCase))
             {
-                AddModel(outfit);
+                if (!Dress(outfit))
+                    AddModel(outfit);
                 RefreshAnimations();
             }
             FrameModel();
@@ -375,6 +376,30 @@ public partial class AssetViewer : Node3D
         {
             GD.PushError($"Failed to load {path}: {exception}");
             _status += (_status.Length == 0 ? string.Empty : "\n") + $"{path}: {exception.Message}";
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Puts a costume pack on the loaded character the way the game equips one (LoadSkin);
+    /// false when no retail character model is loaded or the pack is not a costume.
+    /// </summary>
+    private bool Dress(string costume)
+    {
+        if (_loader == null || VfsPath.GetExtension(costume) is "gltf" or "glb")
+            return false;
+        var model = FindAll<Node3D>(_modelRoot).FirstOrDefault(n => n.HasMeta(MdsModelLoader.DeformFramesMeta));
+        if (model == null)
+            return false;
+        try
+        {
+            int frames = _loader.Mds.ApplySkin(model, costume);
+            _status += $"\n{costume}: costume on {frames} frames";
+            return frames > 0;
+        }
+        catch (Exception exception) when (exception is System.IO.InvalidDataException or ArgumentException)
+        {
+            _status += $"\n{costume}: {exception.Message}";
             return false;
         }
     }

@@ -30,6 +30,7 @@ public partial class LoaderSmokeTest : Node
 
         var args = OS.GetCmdlineUserArgs();
         var models = args.Where(a => a.StartsWith("--model=", StringComparison.Ordinal)).Select(a => a["--model=".Length..]).ToList();
+        var skins = args.Where(a => a.StartsWith("--skin=", StringComparison.Ordinal)).Select(a => a["--skin=".Length..]).ToList();
         var textures = args.Where(a => a.StartsWith("--texture=", StringComparison.Ordinal)).Select(a => a["--texture=".Length..]).ToList();
         if (models.Count == 0)
             models.Add("chara/c01_base.chr");
@@ -40,6 +41,12 @@ public partial class LoaderSmokeTest : Node
             try
             {
                 var node = loader.Load(path);
+                foreach (var skin in skins)
+                {
+                    var model = FindAll<Node3D>(node).FirstOrDefault(n => n.HasMeta(MdsModelLoader.DeformFramesMeta));
+                    if (model != null)
+                        GD.Print($"  costume {skin}: {loader.Mds.ApplySkin(model, skin)} frames");
+                }
                 Describe(node, 1);
                 if (VfsPath.GetExtension(path) is not ("gltf" or "glb"))
                 {

@@ -72,7 +72,13 @@ A character pack (`.chr`) is read the way the game reads it, through its `info.c
 - Keys are evaluated as `MotionProc` does (shorter-arc slerp with its snap thresholds, lerp,
   scale after rotation); bones with scale keys are resampled at every key and decomposed.
 
-Not yet: costume skins loaded onto another skeleton (`LoadSkin`), vertex/shape motion
+Costumes are put on the way `LoadSkin` does it (`MdsModelLoader.ApplySkin`): the costume pack's
+`info.cfg` is read with the skin tags (`MODEL`, `MOTION slot, ?, "x.bbp", "x.wgt"`), its visuals on
+the character's deform frames are skinned to the character's skeleton with bones matched by name,
+and each costume frame replaces what the character's frame of the same name drew (Max's rig
+placeholder triangles). The viewer dresses Max in `mainchr/c01fuku1.chr` this way.
+
+Not yet: vertex/shape motion
 (`SHAPE_ANIME`, key types 12/20/21), material, visibility and camera keys, motion blending,
 sequences (`SEQ`), cloth.
 

@@ -118,12 +118,21 @@ FRAMES = [
 ]
 
 
-def mds():
+# The costume names the same frames in another order, so its bones must be matched by name.
+COSTUME_FRAMES = [
+    ("root", -1, (0, 0, 0), False),
+    ("hip", 0, (0, 0.5, 0), False),
+    ("arm", 1, (0, 0.5, 0), False),
+    ("body", 0, (0, 0.5, 0), True),
+]
+
+
+def mds(frames=FRAMES):
     identity = (1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0)
     records = []
     model = mdt()
-    model_offset = 0x10 + 0x70 * len(FRAMES)
-    for name, parent, translation, has_model in FRAMES:
+    model_offset = 0x10 + 0x70 * len(frames)
+    for name, parent, translation, has_model in frames:
         records.append(struct.pack("<ii", 0, 0x70) + name.encode().ljust(32, b"\0")
                        + struct.pack("<ii", model_offset if has_model else 0, parent)
                        + struct.pack("<16f", *identity, *translation, 1))
@@ -151,10 +160,23 @@ def weights():
     ])
 
 
-def bind_pose():
+def costume_weights():
+    """The costume body (its frame 3) weighted to its hip (1) and arm (2)."""
+    return key_lists([
+        (3, 1, 20, [(0, (100, 0, 0, 0)), (1, (100, 0, 0, 0)), (2, (40, 0, 0, 0)), (3, (40, 0, 0, 0))]),
+        (3, 2, 20, [(2, (60, 0, 0, 0)), (3, (60, 0, 0, 0)), (4, (100, 0, 0, 0))]),
+    ])
+
+
+def costume_info_cfg():
+    """Read with the skin tags: MOTION slot, unused, bind pose, weights."""
+    return b'MODEL "c01f.mds";\nMOTION 0, "", "c01f.bbp", "c01f.wgt";\n'
+
+
+def bind_pose(frames=FRAMES):
     """Scene-space matrix of every frame in the rest pose."""
     world = []
-    for name, parent, translation, _ in FRAMES:
+    for name, parent, translation, _ in frames:
         base = world[parent][3] if parent >= 0 else (0, 0, 0)
         world.append(((1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0),
                       (base[0] + translation[0], base[1] + translation[1], base[2] + translation[2], 1)))
@@ -342,7 +364,14 @@ def main():
         ("info.cfg", b""), ("c01_base.mds", mds()), ("c01_base.wgt", weights()),
         ("c01_base.mot", motion()), ("c01_base.bbp", bind_pose()), ("c01_base.img", textures),
     ]])
-    header, data = data_dat([("chara/c01_base.chr", character), ("chara/c99_binary.chr", binary_character), ("menu/sample.tm2", checker_tim2())])
+    costume = pack([
+        ("info.cfg", costume_info_cfg()),
+        ("c01f.mds", mds(COSTUME_FRAMES)),
+        ("c01f.wgt", costume_weights()),
+        ("c01f.bbp", bind_pose(COSTUME_FRAMES)),
+        ("c01f.img", textures),
+    ])
+    header, data = data_dat([("chara/c01_base.chr", character), ("mainchr/c01fuku1.chr", costume), ("chara/c99_binary.chr", binary_character), ("menu/sample.tm2", checker_tim2())])
     with open(os.path.join(retail, "DATA.HD4"), "wb") as handle:
         handle.write(header)
     with open(os.path.join(retail, "DATA.DAT"), "wb") as handle:

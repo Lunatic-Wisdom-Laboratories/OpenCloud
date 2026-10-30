@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using OpenCloud.Assets.Textures;
+using OpenCloud.Core;
 using OpenCloud.Core.IO;
 using OpenCloud.Rendering;
 using NVector4 = System.Numerics.Vector4;
@@ -217,18 +218,21 @@ public sealed partial class MdsModelLoader
                     Mesh = mesh,
                     Skin = BuildSkin(skeleton, obj.Index, weights, skinning!.BindPose),
                     Skeleton = new NodePath(".."),
-                });
+                }.WithMeta(FrameMeta, obj.Index));
                 LastReport.SkinnedMeshes++;
                 continue;
             }
 
-            var attachment = new BoneAttachment3D { Name = SafeNodeName(boneNames[obj.Index]) };
+            var attachment = new BoneAttachment3D { Name = SafeNodeName(boneNames[obj.Index]) }.WithMeta(FrameMeta, obj.Index);
             skeleton.AddChild(attachment);
             attachment.BoneName = boneNames[obj.Index];
             attachment.AddChild(new MeshInstance3D { Name = "Mesh", Mesh = mesh });
         }
         return root;
     }
+
+    /// <summary>Meta key on a model's node (mesh or bone attachment) holding the frame that owns it.</summary>
+    public const string FrameMeta = "opencloud_frame";
 
     /// <summary>Meta key on a built scene holding the bone name of each MDS object, by index.</summary>
     public const string BoneNamesMeta = "opencloud_bone_names";
@@ -242,16 +246,31 @@ public sealed partial class MdsModelLoader
     /// </summary>
     private static Skin BuildSkin(Skeleton3D skeleton, int modelFrame, VertexWeights weights, IReadOnlyList<System.Numerics.Matrix4x4>? bindPose)
     {
-        Transform3D Base(int frame) => bindPose != null && frame < bindPose.Count
-            ? ToTransform(bindPose[frame])
-            : skeleton.GetBoneGlobalRest(frame);
+        var bases = BaseMatrices(skeleton, bindPose);
+        return BuildSkin(bases, weights.Bones, bases[modelFrame]);
+    }
 
-        var modelBase = Base(modelFrame);
-        var skin = new Skin();
-        foreach (int bone in weights.Bones)
+    /// <summary>Scene-space base matrix of every bone: the bind pose where one is given, else the rest pose.</summary>
+    internal static Transform3D[] BaseMatrices(Skeleton3D skeleton, IReadOnlyList<System.Numerics.Matrix4x4>? bindPose)
+    {
+        var bases = new Transform3D[skeleton.GetBoneCount()];
+        for (int bone = 0; bone < bases.Length; bone++)
         {
-            if (bone >= 0 && bone < skeleton.GetBoneCount())
-                skin.AddBind(bone, Base(bone).AffineInverse() * modelBase);
+            bases[bone] = bindPose != null && bone < bindPose.Count
+                ? ToTransform(bindPose[bone])
+                : skeleton.GetBoneGlobalRest(bone);
+        }
+        return bases;
+    }
+
+    /// <summary>One bind per bone slot; a slot whose bone is missing follows the root.</summary>
+    internal static Skin BuildSkin(Transform3D[] boneBases, IEnumerable<int> bones, Transform3D modelBase)
+    {
+        var skin = new Skin();
+        foreach (int bone in bones)
+        {
+            if (bone >= 0 && bone < boneBases.Length)
+                skin.AddBind(bone, boneBases[bone].AffineInverse() * modelBase);
             else
                 skin.AddBind(0, Transform3D.Identity);
         }
