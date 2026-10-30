@@ -78,8 +78,12 @@ def material(name, diffuse=(1, 1, 1, 1)):
     return struct.pack("<4f4f4ff", *diffuse, 0.5, 0.5, 0.5, 1, 0, 0, 0, 0, 0) + name.encode().ljust(32, b"\0") + struct.pack("<i2f", 0, 0, 0)
 
 
-def mdt():
-    positions = [(-0.5, 0, 0, 1), (0.5, 0, 0, 1), (-0.5, 1, 0, 1), (0.5, 1, 0, 1), (0, 1.2, 0, 1)]
+UPRIGHT_QUAD = [(-0.5, 0, 0, 1), (0.5, 0, 0, 1), (-0.5, 1, 0, 1), (0.5, 1, 0, 1), (0, 1.2, 0, 1)]
+# A 1000 x 1000 floor at y = 0 (the strip uses the first four corners).
+GROUND_QUAD = [(-500, 0, -500, 1), (500, 0, -500, 1), (-500, 0, 500, 1), (500, 0, 500, 1), (0, 0, 0, 1)]
+
+
+def mdt(positions=UPRIGHT_QUAD):
     normals = [(0, 0, 1, 0)]
     uvs = [(0, 1, 0, 0), (1, 1, 0, 0), (0, 0, 0, 0), (1, 0, 0, 0), (0.5, 0.5, 0, 0)]
     colours = [(128, 128, 128, 128), (128, 64, 0, 128)]
@@ -127,10 +131,10 @@ COSTUME_FRAMES = [
 ]
 
 
-def mds(frames=FRAMES):
+def mds(frames=FRAMES, positions=UPRIGHT_QUAD):
     identity = (1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0)
     records = []
-    model = mdt()
+    model = mdt(positions)
     model_offset = 0x10 + 0x70 * len(frames)
     for name, parent, translation, has_model in frames:
         records.append(struct.pack("<ii", 0, 0x70) + name.encode().ljust(32, b"\0")
@@ -207,6 +211,7 @@ MOTION 0, "c01_base.mot", "c01_base.bbp", "";
 KEY_START;
 KEY "\u7acb\u3061", 0, 10, 1.0;
 KEY "walk", 10, 20, 0.5;
+KEY "\u8d70\u308a", 0, 20, 1.0;
 KEY_END;
 MOTION_END;
 """
@@ -312,6 +317,10 @@ PARTS "house";
   FUNC_DATA_END;
  FUNC_POINT_END;
 PARTS_END;
+PARTS "ground";
+ PIECE "ground_col.mds";
+ PIECE_END;
+PARTS_END;
 MAP_PARTS "house_a";
  PARTS_NAME "house";
  PARTS_POS 100.0, 0.0, 0.0;
@@ -321,6 +330,9 @@ MAP_PARTS "house_b", 0;
  PARTS_NAME "house";
  PARTS_SCALE 2.0, 2.0, 2.0;
 MAP_PARTS_END;
+MAP_PARTS "ground";
+ PARTS_NAME "ground";
+MAP_PARTS_END;
 MAP_PARTS "nothing";
  PARTS_NAME "no_such_part";
 MAP_PARTS_END;
@@ -329,6 +341,7 @@ MAP_PARTS_END;
 MODEL_LIST = """MDS "box.mds"; TYPE 0; MDS_END;
 MDS "lamp.mds"; MDS_END;
 MDS "floor_col.mds"; TYPE 1; FAR_CLIP 500.0, 1; MDS_END;
+MDS "ground_col.mds"; TYPE 1; MDS_END;
 """
 
 SKY_INFO = """SKY_IMG 0, "sky0.img";
@@ -344,6 +357,7 @@ def map_files(textures):
         ("box.mds", mds()),
         ("lamp.mds", mds()),
         ("floor_col.mds", mds()),
+        ("ground_col.mds", mds(positions=GROUND_QUAD)),
     ])
     sky = pack([
         ("info.cfg", SKY_INFO.encode()),
