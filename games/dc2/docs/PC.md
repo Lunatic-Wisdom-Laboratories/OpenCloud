@@ -805,6 +805,10 @@ A failed write shows a warning. Settings still work in the current session. Chec
 
 `tools/input/pc-settings-display.input` checks fullscreen, return to windowed, and resizing in a real window. Start with a fresh config containing a nonzero window size, omit `--window`, and stop at frame 940. The optional `PcSettingsReplay` CTests run the headless pad and mouse flows and assert the saved configuration when `DC2_DATA` is available.
 
+### Quit Game
+
+A handheld such as the Steam Deck may have no way to close a window, so the desktop builds offer **QUIT GAME** on the title menu, under its rows, and on the Triangle menu, at its top right. Press **SELECT** or click the entry; a question asks for confirmation, with **No** chosen first. From the Triangle menu it also warns that progress since the last save is lost. Left/Right or Up/Down picks the answer, confirm takes it, and cancel, SELECT or a right click closes the question. **Yes** ends the process as closing the window does (an `SDL_EVENT_QUIT`). The text follows the game's language. `port/src/quit_game.cpp` holds the entry and the question; the `TitleLoop`/`TitleModeDraw` and `MenuInternSelectKey`/`MenuInternSelectDraw` overrides call it around their retail bridges. iOS has none of this.
+
 ### Monster transformation settings
 
 Three PC SETTINGS > Game settings retune Monica's monster transformations. Each is off by default, which keeps retail's numbers, and `port/src/userdata.cpp` overrides `MOS_CHANGE_PARAM::GetAttackVol`, `GetDefenceVol` and `CBattleCharaInfo::AddAbs`.

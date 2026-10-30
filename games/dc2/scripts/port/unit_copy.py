@@ -61,6 +61,8 @@ RETAIL_BRIDGES = {
         ("MenuMainInit(MENU_INIT_ARG*)", "MenuMainInit", "PortRetailMenuMainInit"),
         ("MenuMainExit()", "MenuMainExit", "PortRetailMenuMainExit"),
         ("MenuWorldTrans()", "MenuWorldTrans", "PortRetailMenuWorldTrans"),
+        ("MenuInternSelectKey()", "MenuInternSelectKey", "PortRetailMenuInternSelectKey"),
+        ("MenuInternSelectDraw()", "MenuInternSelectDraw", "PortRetailMenuInternSelectDraw"),
     ],
     "menudraw.cpp": [
         ("DrawMenuFillBox(int,int,int,int)", "DrawMenuFillBox", "PortRetailDrawMenuFillBox"),
@@ -103,7 +105,11 @@ RETAIL_BRIDGES = {
         ("CMenuTreeMap::Step()", "Step", "PortRetailStep"),
         ("CMenuTreeMap::Draw()", "Draw", "PortRetailDraw"),
     ],
-    "title.cpp": [("TitleCopyRightStep()", "TitleCopyRightStep", "PortRetailTitleCopyRightStep")],
+    "title.cpp": [
+        ("TitleCopyRightStep()", "TitleCopyRightStep", "PortRetailTitleCopyRightStep"),
+        ("TitleLoop()", "TitleLoop", "PortRetailTitleLoop"),
+        ("TitleModeDraw()", "TitleModeDraw", "PortRetailTitleModeDraw"),
+    ],
     "menuchr.cpp": [
         ("InitMainCharaBG(int,mgCMemory*,int)", "InitMainCharaBG", "PortRetailInitMainCharaBG"),
         ("KeyMainCharaBG()", "KeyMainCharaBG", "PortRetailKeyMainCharaBG"),

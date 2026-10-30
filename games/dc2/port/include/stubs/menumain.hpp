@@ -4,3 +4,5 @@ extern CMenuInter *CMenuInterPt asm("MenuMouse_Inter");
 int                PortRetailMenuMainInit(MENU_INIT_ARG *) asm("MenuMain_MenuMainInit");
 int                PortRetailMenuMainExit() asm("MenuMain_MenuMainExit");
 void               PortRetailMenuWorldTrans() asm("MenuMain_MenuWorldTrans");
+int                PortRetailMenuInternSelectKey() asm("MenuMain_MenuInternSelectKey");
+void               PortRetailMenuInternSelectDraw() asm("MenuMain_MenuInternSelectDraw");

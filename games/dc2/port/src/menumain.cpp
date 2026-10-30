@@ -9,6 +9,7 @@
 #include "menumain.hpp"
 #include "mg_texture_port.hpp"
 #include "mglib.hpp"
+#include "quit_game.hpp"
 #include "stubs/menumain.hpp"
 #include "texture_source.hpp"
 
@@ -94,4 +95,21 @@ PORT_OVERRIDE void MenuWorldTrans() {
     if (!menuworld::ViewMenuCharacter()) {
         PortRetailMenuWorldTrans();
     }
+}
+
+// QUIT GAME (quit_game.hpp) is offered while the Triangle menu waits for a choice. While its question is asked, the
+// menu's forms still animate but nothing reads the pad.
+PORT_OVERRIDE int MenuInternSelectKey() {
+    const bool ready = CMenuInterPt != nullptr && CMenuInterPt->step == MENU_INTER_STEP_SELECT &&
+                       CMenuInterPt->next_mode < 0 && MenuCommonInfo->key_enable && menu_debug_flag == 0;
+    if (quitgame::Run(quitgame::Place::GameMenu, ready)) {
+        MenuPosData->FormStep();
+        return 0;
+    }
+    return PortRetailMenuInternSelectKey();
+}
+
+PORT_OVERRIDE void MenuInternSelectDraw() {
+    PortRetailMenuInternSelectDraw();
+    quitgame::Draw(quitgame::Place::GameMenu);
 }

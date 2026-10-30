@@ -23,6 +23,7 @@
 #include "menusys.hpp"
 #include "mglib.hpp"
 #include "mglib_port.hpp"
+#include "quit_game.hpp"
 #include "save_slots.hpp"
 #include "stubs/dngmenu.hpp"
 #include "stubs/menuchr.hpp"
@@ -138,7 +139,7 @@ void CostumeMouse() {
 }
 
 void TitleMouse() {
-    if (GetNowLoopNo() != LOOP_TITLE || !MouseTitle || MouseTitle->mode != TITLE_MODE_TITLE) {
+    if (GetNowLoopNo() != LOOP_TITLE || !MouseTitle || MouseTitle->mode != TITLE_MODE_TITLE || quitgame::Asking()) {
         return;
     }
     if (MouseTitlePhase == TITLE_PHASE_MENU) {
