@@ -32,6 +32,20 @@ public partial class LoaderSmokeTest : Node
         var models = args.Where(a => a.StartsWith("--model=", StringComparison.Ordinal)).Select(a => a["--model=".Length..]).ToList();
         var skins = args.Where(a => a.StartsWith("--skin=", StringComparison.Ordinal)).Select(a => a["--skin=".Length..]).ToList();
         var textures = args.Where(a => a.StartsWith("--texture=", StringComparison.Ordinal)).Select(a => a["--texture=".Length..]).ToList();
+        var dumps = args.Where(a => a.StartsWith("--dump=", StringComparison.Ordinal)).Select(a => a["--dump=".Length..]).ToList();
+        if (dumps.Count > 0)
+        {
+            string? output = args.FirstOrDefault(a => a.StartsWith("--out=", StringComparison.Ordinal))?["--out=".Length..];
+            var text = new System.Text.StringBuilder();
+            foreach (var path in dumps)
+                DumpPack(vfs, path, text);
+            if (output != null)
+                System.IO.File.WriteAllText(output, text.ToString());
+            else
+                GD.Print(text.ToString());
+            GetTree().Quit(0);
+            return;
+        }
         if (models.Count == 0)
             models.Add("chara/c01_base.chr");
 
@@ -135,6 +149,58 @@ public partial class LoaderSmokeTest : Node
                 sum += transform * vertices[v] * weight;
             }
             yield return $"{vertices[v]}->{sum}";
+        }
+    }
+
+    /// <summary>
+    /// Raw numbers of a pack for checking placement against the game: its script, every MDS frame
+    /// (parent, file matrix, vertex bounds) and every bind-pose matrix.
+    /// </summary>
+    private static void DumpPack(VirtualFileSystem vfs, string path, System.Text.StringBuilder text)
+    {
+        static string F(float v) => v.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+        static string M(System.Numerics.Matrix4x4 m) =>
+            $"[{F(m.M11)} {F(m.M12)} {F(m.M13)} {F(m.M14)} | {F(m.M21)} {F(m.M22)} {F(m.M23)} {F(m.M24)} | {F(m.M31)} {F(m.M32)} {F(m.M33)} {F(m.M34)} | {F(m.M41)} {F(m.M42)} {F(m.M43)} {F(m.M44)}]";
+
+        text.AppendLine($"== {path}");
+        var pack = vfs.TryOpenPack(VfsPath.Normalize(path));
+        if (pack == null)
+        {
+            text.AppendLine("  not a pack");
+            return;
+        }
+        foreach (var entry in pack.Entries)
+            text.AppendLine($"  entry {entry.Name} {entry.Size}");
+        if (pack.TryRead(CharacterInfo.FileName) is { } info)
+        {
+            foreach (var command in OpenCloud.Core.Scripts.GameScript.Parse(info, CharacterInfo.Tags))
+                text.AppendLine($"  cfg {command.Tag} {string.Join(", ", command.Args.Select(a => a.AsString ?? F(a.AsFloat)))}");
+        }
+        foreach (var entry in pack.Entries)
+        {
+            var data = pack.GetSpan(entry);
+            string extension = VfsPath.GetExtension(entry.Name);
+            if (extension == "mds" && MdsFile.LooksLikeMds(data))
+            {
+                foreach (var frame in MdsFile.Parse(data).Objects)
+                {
+                    text.Append($"  {entry.Name} #{frame.Index} '{frame.Name}' parent {frame.Parent} {M(frame.Matrix)}");
+                    if (frame.Model is { Positions.Length: > 0 } model)
+                    {
+                        var min = model.Positions.Aggregate(System.Numerics.Vector4.Min);
+                        var max = model.Positions.Aggregate(System.Numerics.Vector4.Max);
+                        var p0 = model.Positions[0];
+                        text.Append($" verts {model.Positions.Length} min ({F(min.X)} {F(min.Y)} {F(min.Z)}) max ({F(max.X)} {F(max.Y)} {F(max.Z)}) v0 ({F(p0.X)} {F(p0.Y)} {F(p0.Z)} {F(p0.W)})");
+                    }
+                    text.AppendLine();
+                }
+            }
+            else if (extension == "bbp")
+            {
+                var pose = MotionFile.ParseBindPose(data);
+                for (int i = 0; i < pose.Length; i++)
+                    text.AppendLine($"  {entry.Name} #{i} {M(pose[i])}");
+            }
         }
     }
 
