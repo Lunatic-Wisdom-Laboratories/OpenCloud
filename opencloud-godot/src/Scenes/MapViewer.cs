@@ -18,7 +18,7 @@ namespace OpenCloud.Scenes;
 ///
 /// Keys: PageDown/PageUp next/previous map (or click the list), F reframe, R reload, C collision,
 /// P function points, H pieces the script hides, L map lighting on/off, [ ] game clock -/+ 1 h,
-/// Tab asset viewer, F1 help. Start on a map with <c>-- --map=s01</c> (a name or a path).
+/// Tab walk this map in town mode, F1 help. Start on a map with <c>-- --map=s01</c> (a name or a path).
 /// </summary>
 public partial class MapViewer : Node3D
 {
@@ -93,6 +93,7 @@ public partial class MapViewer : Node3D
             if (argument.StartsWith("--map=", StringComparison.Ordinal))
                 initial = argument["--map=".Length..];
         }
+        initial = ViewerSwitch.TakeMap(initial);
         int index = 0;
         if (!string.IsNullOrEmpty(initial))
         {
@@ -146,8 +147,8 @@ public partial class MapViewer : Node3D
                 SetClock(_clock + 1.0f);
                 break;
             case Key.Tab:
-                GetTree().ChangeSceneToFile("res://src/Scenes/AssetViewer.tscn");
-                break;
+                ViewerSwitch.Next(this, ViewerSwitch.Town, _current >= 0 ? _maps[_current] : null);
+                return;
             case Key.F1:
                 _showHelp = !_showHelp;
                 UpdateHud();
@@ -283,7 +284,7 @@ public partial class MapViewer : Node3D
             text.AppendLine();
             text.AppendLine("PgDn/PgUp map · F frame · R reload · C collision" + (_showCollision ? " [on]" : "") +
                             " · P points" + (_showPoints ? " [on]" : "") + " · H hidden pieces" + (_map?.ShowHidden == true ? " [on]" : "") +
-                            " · L lighting · [ ] clock · Tab asset viewer · F1 help");
+                            " · L lighting · [ ] clock · Tab town mode · F1 help");
             text.AppendLine("right mouse look · WASD move · Q/E down/up · Shift fast · wheel speed");
         }
         _hud.Text = text.ToString();

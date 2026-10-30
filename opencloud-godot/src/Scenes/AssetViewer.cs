@@ -154,8 +154,8 @@ public partial class AssetViewer : Node3D
                 ApplyBoneMarkers();
                 break;
             case Key.Tab:
-                GetTree().ChangeSceneToFile("res://src/Scenes/MapViewer.tscn");
-                break;
+                ViewerSwitch.Next(this, ViewerSwitch.MapViewer);
+                return;
             case Key.F1:
                 _showHelp = !_showHelp;
                 UpdateHud();
