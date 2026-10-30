@@ -51,6 +51,13 @@ public partial class LoaderSmokeTest : Node
         if (models.Count == 0)
             models.Add("chara/c01_base.chr");
 
+        var attaches = args.Where(a => a.StartsWith("--attach=", StringComparison.Ordinal)).Select(a => a["--attach=".Length..]).ToList();
+        if (attaches.Count > 0)
+        {
+            ShowAttachedParts(new GameModelLoader(vfs), models[0], skins, attaches);
+            return;
+        }
+
         var loader = new GameModelLoader(vfs);
         foreach (var path in models)
         {
@@ -219,6 +226,56 @@ public partial class LoaderSmokeTest : Node
                     text.AppendLine($"  {entry.Name} #{i} {M(pose[i])}");
             }
         }
+    }
+
+    /// <summary>
+    /// Loads a character, dresses it, hangs parts on bones (<c>path@bone</c>) as the viewer does and,
+    /// once Godot has posed everything, prints where every mesh really is: its global basis and its
+    /// world bounds. Quits when done.
+    /// </summary>
+    private async void ShowAttachedParts(GameModelLoader loader, string modelPath, List<string> skins, List<string> attaches)
+    {
+        var node = loader.Load(modelPath);
+        foreach (var skin in skins)
+        {
+            var model = FindAll<Node3D>(node).FirstOrDefault(n => n.HasMeta(MdsModelLoader.DeformFramesMeta));
+            if (model != null)
+                GD.Print($"  costume {skin}: {loader.Mds.ApplySkin(model, skin)} frames");
+        }
+        AddChild(node);
+        foreach (var attach in attaches)
+        {
+            var parts = attach.Split('@');
+            string bone = parts.Length > 1 ? parts[1] : "hat";
+            var skeleton = FindAll<Skeleton3D>(node).FirstOrDefault(s => s.IsVisibleInTree() && s.FindBone(bone) >= 0)
+                ?? FindAll<Skeleton3D>(node).FirstOrDefault(s => Enumerable.Range(0, s.GetBoneCount()).Any(i => MdsObject.StripAttributes(s.GetBoneName(i)) == bone));
+            if (skeleton == null)
+            {
+                GD.PrintErr($"  no skeleton with bone {bone}");
+                continue;
+            }
+            int index = Enumerable.Range(0, skeleton.GetBoneCount()).First(i => MdsObject.StripAttributes(skeleton.GetBoneName(i)) == bone);
+            var attachment = new BoneAttachment3D { Name = "ref_" + bone };
+            skeleton.AddChild(attachment);
+            attachment.BoneName = skeleton.GetBoneName(index);
+            attachment.AddChild(loader.Load(parts[0]));
+        }
+
+        for (int i = 0; i < 3; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        static string V(Vector3 v) => $"({v.X:0.###} {v.Y:0.###} {v.Z:0.###})";
+        foreach (var mesh in FindAll<MeshInstance3D>(node))
+        {
+            if (mesh.Mesh == null)
+                continue;
+            var t = mesh.GlobalTransform;
+            var box = t * mesh.Mesh.GetAabb();
+            string skinned = mesh.Skin != null ? " skinned" : string.Empty;
+            string hidden = mesh.IsVisibleInTree() ? string.Empty : " hidden";
+            GD.Print($"  mesh {node.GetPathTo(mesh)}{skinned}{hidden}: basis x{V(t.Basis.X)} y{V(t.Basis.Y)} z{V(t.Basis.Z)} origin {V(t.Origin)} world box {V(box.Position)}..{V(box.End)}");
+        }
+        GetTree().Quit(0);
     }
 
     private static IEnumerable<T> FindAll<T>(Node root) where T : Node
