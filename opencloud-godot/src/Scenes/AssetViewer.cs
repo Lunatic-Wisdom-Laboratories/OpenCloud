@@ -80,6 +80,16 @@ public partial class AssetViewer : Node3D
     private float _speed = 1.0f;
     private (Skeleton3D Skeleton, int Bone, string Name)? _watchedBone;
 
+    // Placement test for the hat (H): which turn of the part matches the game.
+    private Node3D? _testPart;
+    private Basis _testBoneBasis = Basis.Identity;
+    private Basis _testPartRoot = Basis.Identity;
+    private int _testMode;
+    private static readonly string[] TestModes =
+    {
+        "as loaded", "yaw +90 (Max up)", "yaw 180 (Max up)", "yaw -90 (Max up)", "without the part's root rest",
+    };
+
     /// <summary>Meta on the attachment that holds a part hung on a bone (SetRef).</summary>
     private const string PartMeta = "opencloud_part";
     private bool _useKeyStep = true;
@@ -180,6 +190,9 @@ public partial class AssetViewer : Node3D
                 break;
             case Key.Key0:
                 ShowRestPose();
+                break;
+            case Key.H:
+                CyclePartTest();
                 break;
             default:
                 return;
@@ -452,6 +465,12 @@ public partial class AssetViewer : Node3D
             attachment.BoneName = skeleton.GetBoneName(BoneIndex(skeleton));
             var part = _loader.Load(path);
             attachment.AddChild(part);
+            _testPart = part as Node3D;
+            _testMode = 0;
+            _testBoneBasis = skeleton.GetBoneGlobalRest(BoneIndex(skeleton)).Basis.Orthonormalized();
+            _testPartRoot = FindAll<Skeleton3D>(part).FirstOrDefault() is { } ps && ps.GetBoneCount() > 0
+                ? ps.GetBoneRest(0).Basis.Orthonormalized()
+                : Basis.Identity;
             _status += $"\n{path}: on {bone}";
             if (_loader.Mds.LastReport.Character is { } partInfo)
                 _status += $"\n  part info.cfg: {partInfo.Motions.Count} motion slots, position {partInfo.Position?.ToString() ?? "-"}, rotation {partInfo.Rotation?.ToString() ?? "-"}" +
@@ -514,6 +533,25 @@ public partial class AssetViewer : Node3D
             }
         }
         return report.Length > 0 ? report.ToString() : "\n  part has no motion";
+    }
+
+    /// <summary>H: turns the hung part through the placements under test and names the current one.</summary>
+    private void CyclePartTest()
+    {
+        if (_testPart == null || !IsInstanceValid(_testPart))
+            return;
+        _testMode = (_testMode + 1) % TestModes.Length;
+        // A yaw about Max's up axis, written in the bone's space.
+        Basis Yaw(float degrees) => _testBoneBasis.Inverse() * new Basis(Vector3.Up, Mathf.DegToRad(degrees)) * _testBoneBasis;
+        _testPart.Transform = new Transform3D(_testMode switch
+        {
+            1 => Yaw(90),
+            2 => Yaw(180),
+            3 => Yaw(-90),
+            4 => _testPartRoot.Inverse(),
+            _ => Basis.Identity,
+        }, Vector3.Zero);
+        UpdateHud();
     }
 
     private static bool InPart(Node node)
@@ -622,6 +660,8 @@ public partial class AssetViewer : Node3D
         }
         if (_watchedBone is var (watched, index, name) && IsInstanceValid(watched) && index >= 0)
             text.AppendLine($"  {name} now {Describe(watched.GetBoneGlobalPose(index))}");
+        if (_testPart != null && IsInstanceValid(_testPart))
+            text.AppendLine($"  H hat test {_testMode + 1}/{TestModes.Length}: {TestModes[_testMode]}");
         if (_showHelp)
         {
             text.AppendLine();
