@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
+using OpenCloud.Assets.Maps;
 using OpenCloud.Assets.Models;
 using OpenCloud.Assets.Textures;
 using OpenCloud.Core;
@@ -32,6 +33,7 @@ public partial class LoaderSmokeTest : Node
         var models = args.Where(a => a.StartsWith("--model=", StringComparison.Ordinal)).Select(a => a["--model=".Length..]).ToList();
         var skins = args.Where(a => a.StartsWith("--skin=", StringComparison.Ordinal)).Select(a => a["--skin=".Length..]).ToList();
         var textures = args.Where(a => a.StartsWith("--texture=", StringComparison.Ordinal)).Select(a => a["--texture=".Length..]).ToList();
+        var maps = args.Where(a => a.StartsWith("--map=", StringComparison.Ordinal)).Select(a => a["--map=".Length..]).ToList();
         var dumps = args.Where(a => a.StartsWith("--dump=", StringComparison.Ordinal)).Select(a => a["--dump=".Length..]).ToList();
         if (dumps.Count > 0)
         {
@@ -48,7 +50,7 @@ public partial class LoaderSmokeTest : Node
             GetTree().Quit(0);
             return;
         }
-        if (models.Count == 0)
+        if (models.Count == 0 && maps.Count == 0)
             models.Add("chara/c01_base.chr");
 
         var attaches = args.Where(a => a.StartsWith("--attach=", StringComparison.Ordinal)).Select(a => a["--attach=".Length..]).ToList();
@@ -104,8 +106,73 @@ public partial class LoaderSmokeTest : Node
                 GD.Print($"texture {path}: {texture.Name} {DescribeTexture(texture.Texture)} alpha={texture.HasTransparency}");
         }
 
+        var mapLoader = new MapLoader(vfs, new MdsModelLoader(vfs));
+        foreach (var path in maps)
+        {
+            try
+            {
+                failures += CheckMap(mapLoader, path);
+            }
+            catch (Exception exception)
+            {
+                GD.PrintErr($"map {path}: {exception}");
+                failures++;
+            }
+        }
+
         GD.Print(failures == 0 ? "SMOKE TEST PASSED" : $"SMOKE TEST FAILED ({failures})");
         GetTree().Quit(failures == 0 ? 0 : 1);
+    }
+
+    /// <summary>
+    /// Loads a map, prints what was built (every placed node with its map-space origin) and
+    /// steps the clock through the day so time-banded pieces and lighting sets can be checked.
+    /// </summary>
+    private int CheckMap(MapLoader loader, string path)
+    {
+        var map = loader.Load(path);
+        var r = map.Report;
+        var info = map.Info;
+        GD.Print($"map {map.Path}: textures {string.Join(",", info.TexturePacks)}, models {string.Join(",", info.ModelPacks)}, lighting sets {info.LightingSets.Count(s => s != null)}, sky info {info.SkyInfo}");
+        GD.Print($"  layout: parts {map.Layout.Parts.Count} [{string.Join(", ", map.Layout.Parts.Select(p => $"{p.Name}: {p.Pieces.Count} pieces, {p.FuncPoints.Count} points"))}], placements {map.Layout.Placements.Count}, map points {map.Layout.FuncPoints.Count}");
+        GD.Print($"  report: lists {r.ModelLists} ({r.Models} models), textures {r.Textures}, placed {r.Placements}, pieces {r.PlacedPieces}, meshes {r.MeshInstances}, characters {r.Characters}, collision tris {r.CollisionTriangles}, points {r.FuncPoints}");
+        GD.Print($"  missing models [{string.Join(", ", r.MissingModels)}], missing parts [{string.Join(", ", r.MissingParts)}]");
+        foreach (var note in r.Notes)
+            GD.Print($"  note: {note}");
+        AddChild(map.Root);
+        DescribePlaced(map.Root, Transform3D.Identity, 1);
+        foreach (float hour in new[] { 3.0f, 7.0f, 12.0f, 19.0f, 22.0f })
+        {
+            map.SetClock(hour);
+            var shown = map.Pieces.Where(p => p.Node.Visible).Select(p => $"{p.Placement.Name}/{p.Node.Name}");
+            GD.Print($"  clock {hour:00}h: band {MapInfo.TimeBand(map.NowTime)}, lighting {map.Lighting?.Index.ToString() ?? "-"}, visible [{string.Join(", ", shown)}]");
+        }
+        map.SetShowHidden(true);
+        GD.Print($"  show hidden: {map.Pieces.Count(p => p.Node.Visible)} of {map.Pieces.Count} pieces visible, bounds {map.ComputeBounds()}");
+        RemoveChild(map.Root);
+        map.Root.Free();
+        return r.Placements > 0 ? 0 : 1;
+    }
+
+    private static void DescribePlaced(Node node, Transform3D parent, int depth)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            var transform = child is Node3D spatial ? parent * spatial.Transform : parent;
+            string detail = child switch
+            {
+                CollisionShape3D { Shape: ConcavePolygonShape3D shape } => $" faces={shape.GetFaces().Length / 3} first={(shape.GetFaces().Length > 0 ? transform * shape.GetFaces()[0] : Vector3.Zero)}",
+                StaticBody3D body => $" layer={body.CollisionLayer}",
+                MeshInstance3D mesh => $" at {transform.Origin} x-axis {transform.Basis.Column0} layers={mesh.Layers}",
+                Node3D => $" at {transform.Origin}",
+                _ => string.Empty,
+            };
+            if (child is Label3D)
+                continue;
+            GD.Print($"{new string(' ', depth * 2)}{child.Name} ({child.GetClass()}){detail}");
+            if (child is not MeshInstance3D || child.GetChildCount() > 0)
+                DescribePlaced(child, transform, depth + 1);
+        }
     }
 
     /// <summary>
