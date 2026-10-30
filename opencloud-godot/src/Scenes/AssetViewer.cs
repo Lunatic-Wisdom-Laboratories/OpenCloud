@@ -76,6 +76,7 @@ public partial class AssetViewer : Node3D
     private readonly List<AnimationPlayer> _players = new();
     private int _animation = -1;
     private float _speed = 1.0f;
+    private (Skeleton3D Skeleton, int Bone, string Name)? _watchedBone;
     private bool _useKeyStep = true;
     private bool _paused;
 
@@ -172,6 +173,9 @@ public partial class AssetViewer : Node3D
                 _useKeyStep = !_useKeyStep;
                 ApplySpeed();
                 break;
+            case Key.Key0:
+                ShowRestPose();
+                break;
             default:
                 return;
         }
@@ -236,6 +240,18 @@ public partial class AssetViewer : Node3D
         // Keep the frame counter live while a clip plays.
         if (_animation >= 0 && !_paused)
             UpdateHud();
+    }
+
+    /// <summary>Stops every clip and shows the skeletons in their authored rest pose.</summary>
+    private void ShowRestPose()
+    {
+        foreach (var player in _players)
+            player.Stop();
+        foreach (var skeleton in FindAll<Skeleton3D>(_modelRoot))
+            skeleton.ResetBonePoses();
+        _animation = -1;
+        _animationList.DeselectAll();
+        UpdateHud();
     }
 
     private void StepAnimation(int direction)
@@ -425,6 +441,7 @@ public partial class AssetViewer : Node3D
         try
         {
             var attachment = new BoneAttachment3D { Name = MdsModelLoader.SafeNodeName("ref_" + bone) };
+            _watchedBone = (skeleton, BoneIndex(skeleton), bone);
             skeleton.AddChild(attachment);
             attachment.BoneName = skeleton.GetBoneName(BoneIndex(skeleton));
             var part = _loader.Load(path);
@@ -454,6 +471,7 @@ public partial class AssetViewer : Node3D
 
     private void ClearModel()
     {
+        _watchedBone = null;
         _players.Clear();
         _animations.Clear();
         _animation = -1;
@@ -535,11 +553,17 @@ public partial class AssetViewer : Node3D
             text.AppendLine($"Animation {_animation + 1}/{_animations.Count}: {_animations[_animation]}  frame {frame}" +
                             $"  speed x{_speed:0.###}{(_useKeyStep ? " * KEY step" : string.Empty)}{(_paused ? "  [paused]" : string.Empty)}");
         }
+        else if (_animations.Count > 0)
+        {
+            text.AppendLine("Rest pose (no animation)");
+        }
+        if (_watchedBone is var (watched, index, name) && IsInstanceValid(watched) && index >= 0)
+            text.AppendLine($"  {name} now {Describe(watched.GetBoneGlobalPose(index))}");
         if (_showHelp)
         {
             text.AppendLine();
             text.AppendLine("PgDn/PgUp browse  Home Max  F frame  B bones  R reload  F1 help");
-            text.AppendLine("Up/Down animation  Space pause  Left/Right frame step  -/= speed  T KEY step");
+            text.AppendLine("Up/Down animation  Space pause  Left/Right frame step  -/= speed  T KEY step  0 rest pose");
             text.AppendLine("RMB look  WASD move  Q/E down/up  Shift fast  Wheel speed");
         }
         _hud.Text = text.ToString();
