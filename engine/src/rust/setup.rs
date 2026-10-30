@@ -215,7 +215,7 @@ impl Drop for Setup {
 /// disc, which is what this window is extracting.
 const ICON_PNG: &[u8] = include_bytes!("../../assets/two-moons-256.png");
 
-fn icon() -> Option<egui::IconData> {
+pub(crate) fn icon() -> Option<egui::IconData> {
     let mut reader = png::Decoder::new(std::io::Cursor::new(ICON_PNG))
         .read_info()
         .ok()?;

@@ -1,6 +1,9 @@
 pub mod core;
 #[cfg(not(test))]
 mod host_jobs;
+pub mod launcher;
+#[cfg(not(test))]
+mod launcher_host;
 #[cfg(feature = "desktop-ui")]
 mod setup;
 
@@ -47,6 +50,8 @@ mod ffi {
         /// progress while it runs on another thread.
         fn extract_tracked(source: &str, data_out: &str, jobs: usize) -> Result<ExtractReport>;
         fn extract_status() -> ExtractStatus;
+        /// The boot executable a disc image or folder names in SYSTEM.CNF ("SCES_511.90"), or empty without one.
+        fn disc_serial(source: &str) -> Result<String>;
         fn extract_with_script_policy(
             source: &str,
             data_out: &str,
@@ -54,7 +59,11 @@ mod ffi {
             policy: ScriptPublicationPolicy,
         ) -> Result<ExtractReport>;
         fn textures_convert(raw: &str, output: &str, jobs: usize) -> Result<TextureConvertReport>;
-        fn textures_convert_dc1(raw: &str, output: &str, jobs: usize) -> Result<TextureConvertReport>;
+        fn textures_convert_dc1(
+            raw: &str,
+            output: &str,
+            jobs: usize,
+        ) -> Result<TextureConvertReport>;
         fn textures_document_map_dc1(raw: &str, output: &str, jobs: usize) -> Result<String>;
         fn textures_verify(textures: &str) -> Result<()>;
         fn list(source: &str) -> Result<String>;
@@ -155,15 +164,24 @@ fn extract_tracked(
     jobs: usize,
 ) -> Result<ffi::ExtractReport, core::CoreError> {
     *EXTRACT_STATUS.lock().unwrap() = (0.0, "");
-    let report = core::extract_with_progress(source.as_ref(), data_out.as_ref(), jobs, &|fraction, stage| {
-        *EXTRACT_STATUS.lock().unwrap() = (fraction, stage);
-    })?;
+    let report = core::extract_with_progress(
+        source.as_ref(),
+        data_out.as_ref(),
+        jobs,
+        &|fraction, stage| {
+            *EXTRACT_STATUS.lock().unwrap() = (fraction, stage);
+        },
+    )?;
     Ok(ffi::ExtractReport {
         files: report.files,
         bytes: report.bytes,
         texture_sources: report.texture_sources,
         pngs: report.pngs,
     })
+}
+
+fn disc_serial(source: &str) -> Result<String, core::CoreError> {
+    Ok(core::archive::disc_serial(source.as_ref())?.unwrap_or_default())
 }
 
 fn extract_status() -> ffi::ExtractStatus {

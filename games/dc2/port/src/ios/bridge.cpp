@@ -11,20 +11,23 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <future>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "audio/synth.hpp"
 #include "dualsense_haptics.hpp"
+#include "gfx/gfx.hpp"
 #include "ios/bridge.hpp"
+#include "launcher/model.hpp"
 #include "log/log.hpp"
-#include "options/rows.hpp"
-#include "platform/config.hpp"
 #include "platform/firstrun.hpp"
 #include "platform/input.hpp"
 #include "platform/paths.hpp"
+#include "save_slots.hpp"
 
 namespace ct::ios {
 namespace fs = std::filesystem;
@@ -38,13 +41,14 @@ constexpr std::array<std::uint16_t, 16> kButtons = {
     kInputUp, kInputDown, kInputLeft, kInputRight, kInputCross, kInputCircle, kInputSquare, kInputTriangle,
     kInputL1, kInputR1, kInputL2, kInputR2, kInputSelect, kInputStart, kInputL3, kInputR3};
 
-const options::Row *RowAt(int page, int row) {
-    const auto pages = options::Pages();
-    if (page < 0 || std::cmp_greater_equal(page, pages.size()) || row < 0 ||
-        std::cmp_greater_equal(row, pages[page].rows.size())) {
-        return nullptr;
+std::vector<launcher::Save> saves;
+std::vector<PhotoInfo>      photos;
+
+std::string Fill(std::string text, const std::string &value) {
+    if (const auto at = text.find("{}"); at != std::string::npos) {
+        text.replace(at, 2, value);
     }
-    return &pages[page].rows[row];
+    return text;
 }
 
 } // namespace
@@ -63,48 +67,105 @@ int HapticsRate() { return audio::kSpuRate; }
 
 void HapticsRender(float *left_right, int frames) { ::HapticsRender(left_right, frames); }
 
-std::string PageTitle() { return options::kPageTitle; }
+std::string Text(const std::string &key) { return launcher::Text(key); }
 
-int SettingsPageCount() { return static_cast<int>(options::Pages().size()); }
+void SetSystemLanguage(const std::string &code) { launcher::SetSystemLanguage(code); }
 
-std::string SettingsPageName(int page) {
-    const auto pages = options::Pages();
-    return page >= 0 && std::cmp_less(page, pages.size()) ? pages[page].name : "";
-}
+int LanguageCount() { return launcher::kLanguageCount; }
 
-int SettingsRowCount(int page) {
-    const auto pages = options::Pages();
-    return page >= 0 && std::cmp_less(page, pages.size()) ? static_cast<int>(pages[page].rows.size()) : 0;
-}
+int LanguageIndex() { return static_cast<int>(launcher::CurrentLanguage()) - 1; }
 
-bool SettingsRowSteppable(int page, int row) {
-    const options::Row *entry = RowAt(page, row);
-    return entry != nullptr && entry->step && entry->action.empty();
-}
+std::string LanguageName(int index) { return launcher::LanguageName(launcher::LanguageAt(index)); }
 
-std::string SettingsRowLabel(int page, int row) {
-    const options::Row *entry = RowAt(page, row);
-    return entry != nullptr ? entry->label : "";
-}
+void SetLanguageIndex(int index) { launcher::SetLanguage(launcher::LanguageAt(index)); }
 
-std::string SettingsRowHelp(int page, int row) {
-    const options::Row *entry = RowAt(page, row);
-    return entry != nullptr ? entry->help : "";
-}
+int SettingCount() { return static_cast<int>(launcher::Settings().size()); }
 
-std::string SettingsRowValue(int page, int row) {
-    const options::Row *entry = RowAt(page, row);
-    return entry != nullptr && entry->value ? entry->value(ConfigGet()) : "";
+SettingInfo SettingAt(int index) {
+    const auto settings = launcher::Settings();
+    if (index < 0 || std::cmp_greater_equal(index, settings.size())) {
+        return {};
+    }
+    const launcher::Setting &setting = settings[index];
+    return {.page = setting.page, .row = setting.row, .page_name = setting.page_name, .label = setting.label, .help = setting.help, .value = setting.value};
 }
 
 StepResult SettingsStep(int page, int row, int direction) {
-    const options::Row *entry = RowAt(page, row);
-    Config              config = ConfigGet();
-    if (entry == nullptr || !options::StepRow(*entry, config, direction)) {
-        return StepResult::Unchanged;
+    switch (launcher::StepSetting(page, row, direction)) {
+        case launcher::StepResult::Saved:
+            return StepResult::Saved;
+        case launcher::StepResult::NotSaved:
+            return StepResult::NotSaved;
+        default:
+            return StepResult::Unchanged;
     }
-    return ConfigChange(config) ? StepResult::Saved : StepResult::NotSaved;
 }
+
+int RefreshSaves() {
+    saves = launcher::Saves();
+    return static_cast<int>(saves.size());
+}
+
+SaveInfo SaveAt(int index) {
+    if (index < 0 || std::cmp_greater_equal(index, saves.size())) {
+        return {};
+    }
+    const launcher::Save &save = saves[index];
+    SaveInfo info{.file = save.file, .path = PathsDisplay(SaveSlotsRoot() / PathsFromUtf8(save.file)), .modified = save.modified, .readable = save.readable};
+    info.title = save.autosave ? launcher::Text("saves.autosave") : Fill(launcher::Text("saves.slot"), std::to_string(save.number + 1));
+    if (save.readable) {
+        const std::uint64_t minutes = save.play_seconds / 60;
+        info.detail = std::format("{}  ·  {} {}:{:02}", save.chapter, launcher::Text("saves.play_time"), minutes / 60, minutes % 60);
+    } else {
+        info.detail = save.status;
+    }
+    return info;
+}
+
+bool SavesProtected() { return launcher::SavesProtected(); }
+
+std::string DeleteSave(const std::string &file) { return launcher::DeleteSave(file); }
+
+std::string DuplicateSave(const std::string &file) { return launcher::DuplicateSave(file); }
+
+std::string ImportSave(const std::string &source) { return launcher::ImportSave(source); }
+
+int LegacySaveCount() { return launcher::LegacySaveCount(); }
+
+Outcome ImportLegacy() {
+    int               imported = 0;
+    const std::string error = launcher::ImportLegacy(imported);
+    if (!error.empty()) {
+        return {.message = error};
+    }
+    return {.ok = true, .message = Fill(launcher::Text("saves.legacy_done"), std::to_string(imported))};
+}
+
+int RefreshPhotos() {
+    photos.clear();
+    const char *home = std::getenv("HOME");
+    if (home == nullptr) {
+        return 0;
+    }
+    // Written afresh each time: a deleted photo's slot can hold another one next time.
+    const fs::path  folder = fs::path(home) / "Library" / "Caches" / "album";
+    std::error_code error;
+    fs::remove_all(folder, error);
+    fs::create_directories(folder, error);
+    for (const launcher::Photo &photo : launcher::Photos()) {
+        const fs::path png = folder / std::format("dark-cloud-2-album-{}-{:02}.png", photo.card + 1, photo.slot + 1);
+        if (gfx::WritePng(png, photo.rgba.data(), photo.width, photo.height)) {
+            photos.push_back({.card = photo.card, .slot = photo.slot, .hd = photo.hd, .png = png.string()});
+        }
+    }
+    return static_cast<int>(photos.size());
+}
+
+PhotoInfo PhotoAt(int index) {
+    return index >= 0 && std::cmp_less(index, photos.size()) ? photos[index] : PhotoInfo{};
+}
+
+std::string DeletePhoto(int card, int slot) { return launcher::DeletePhoto(card, slot); }
 
 bool DataMissing(const std::string &root) { return FirstRunDataMissing(root); }
 
@@ -146,6 +207,17 @@ void ExtractBegin(const std::string &image, const std::string &root) {
         return;
     }
     extraction_failure.clear();
+    try {
+        const std::string serial(kazarov::disc_serial(image));
+        if (!serial.empty() && serial != "SCES_511.90") {
+            extraction_failure = Fill(launcher::Text("data.not_pal"), serial);
+            CT_LOG_ERROR(Main, "Game data setup: {} is {}, not Dark Chronicle PAL", PathsDisplay(image), serial);
+            return;
+        }
+    } catch (const std::exception &error) {
+        extraction_failure = error.what();
+        return;
+    }
     CT_LOG_INFO(Main, "Extracting game data from {}", PathsDisplay(image));
     extraction_worker = {};
     try {

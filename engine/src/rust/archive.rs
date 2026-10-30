@@ -188,6 +188,50 @@ fn image_extent(image: &Path, entry: &FileEntry) -> CoreResult<Extent> {
     Ok(extent)
 }
 
+/// The boot executable's name in a disc's SYSTEM.CNF ("SCES_511.90" for Dark Chronicle PAL), or None when the
+/// image or folder has no SYSTEM.CNF to read it from.
+pub fn disc_serial(source: &Path) -> CoreResult<Option<String>> {
+    let text = if source.is_dir() {
+        match fs::read(source.join("SYSTEM.CNF")) {
+            Ok(bytes) => bytes,
+            Err(_) => return Ok(None),
+        }
+    } else {
+        let file =
+            File::open(source).map_err(|cause| error(format!("{}: {cause}", source.display())))?;
+        // SAFETY: the image is only read, and a disc image is not expected to change while it is open.
+        let bytes = unsafe { memmap2::Mmap::map(&file) }
+            .map_err(|cause| error(format!("{}: {cause}", source.display())))?;
+        let block_size =
+            BlockSize::new(SECTOR as u32).ok_or_else(|| error("invalid ISO sector size"))?;
+        let mut io =
+            BlockIoAdapter::new(ReadOnlyCursor(std::io::Cursor::new(&bytes[..])), block_size);
+        let volume = mount(&mut io, 0)
+            .map_err(|cause| error(format!("{}: ISO mount: {cause}", source.display())))?;
+        let Ok(entry) = find_file(&mut io, &volume, "/SYSTEM.CNF") else {
+            return Ok(None);
+        };
+        let start = u64::from(entry.extent_lba) * SECTOR;
+        let end = start + u64::from(entry.data_length).min(4096);
+        match bytes.get(start as usize..end as usize) {
+            Some(text) => text.to_vec(),
+            None => return Ok(None),
+        }
+    };
+    Ok(boot_serial(&String::from_utf8_lossy(&text)))
+}
+
+/// The executable named on SYSTEM.CNF's BOOT2 line: "BOOT2 = cdrom0:\SCES_511.90;1" gives "SCES_511.90".
+fn boot_serial(system_cnf: &str) -> Option<String> {
+    let line = system_cnf
+        .lines()
+        .find(|line| line.trim_start().to_ascii_uppercase().starts_with("BOOT2"))?;
+    let path = line.split_once('=')?.1.trim();
+    let name = path.rsplit(['\\', '/', ':']).next()?;
+    let name = name.split(';').next()?.trim();
+    (!name.is_empty()).then(|| name.to_ascii_uppercase())
+}
+
 fn open_image_bytes(image: &Path, bytes: &[u8]) -> CoreResult<Archive> {
     let block_size =
         BlockSize::new(SECTOR as u32).ok_or_else(|| error("invalid ISO sector size"))?;
@@ -496,7 +540,10 @@ enum SourceData {
     /// iOS gives an app about 7 GB of address space: a 4.7 GB disc image, read or mapped whole, leaves the
     /// converters too little, and an allocation fails. There each resource maps its own range of the image only
     /// while it is read.
-    Mapped { file: File, length: usize },
+    Mapped {
+        file: File,
+        length: usize,
+    },
 }
 
 /// A source's bytes, borrowed from memory or mapped from the disc image for as long as this lives.
@@ -1195,7 +1242,10 @@ mod tests {
         let dc1 = SourceTree::directory_dc1(temp.path()).unwrap();
         assert_eq!(dc1.names().collect::<Vec<_>>(), ["asset.bin"]);
         let default = SourceTree::directory(temp.path()).unwrap();
-        assert_eq!(default.names().collect::<Vec<_>>(), ["asset.bin", "textures/stale.json"]);
+        assert_eq!(
+            default.names().collect::<Vec<_>>(),
+            ["asset.bin", "textures/stale.json"]
+        );
     }
 
     fn index() -> Vec<u8> {
@@ -1433,5 +1483,15 @@ mod tests {
         );
         assert!(!read_sound_index(&archive)?.entries.is_empty());
         Ok(())
+    }
+
+    #[test]
+    fn boot_serial_reads_the_boot2_executable() {
+        assert_eq!(
+            boot_serial("BOOT2 = cdrom0:\\SCES_511.90;1\r\nVER = 1.00\r\nVMODE = PAL\r\n")
+                .as_deref(),
+            Some("SCES_511.90")
+        );
+        assert_eq!(boot_serial("VMODE = PAL\n"), None);
     }
 }

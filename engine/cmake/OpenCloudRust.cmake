@@ -45,7 +45,7 @@ endif()
 if(OC_FFMPEG_DIR)
     corrosion_set_env_vars(opencloud_core "OPENCLOUD_FFMPEG_INCLUDE=${OC_FFMPEG_DIR}/include" "OPENCLOUD_FFMPEG_LIB=${OC_FFMPEG_DIR}/lib")
 endif()
-corrosion_add_cxxbridge(opencloud_bridge CRATE opencloud_core FILES rust/lib.rs rust/host_jobs.rs)
+corrosion_add_cxxbridge(opencloud_bridge CRATE opencloud_core FILES rust/lib.rs rust/host_jobs.rs rust/launcher_host.rs)
 target_include_directories(opencloud_bridge PUBLIC "${CMAKE_CURRENT_LIST_DIR}/../include")
 
 # Corrosion imports Rust's standard native libraries, but not the GUI crates'

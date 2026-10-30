@@ -13,6 +13,7 @@
 #include <system_error>
 
 #include "exitcodes.hpp"
+#include "launcher/desktop.hpp"
 #include "opencloud/data_version.hpp"
 #include "log/log.hpp"
 #include "platform/firstrun.hpp"
@@ -63,7 +64,7 @@ std::string FirstRunDataMessage(const fs::path &root) {
            FlatpakHint(where);
 }
 
-void FirstRunRequireData(const fs::path &root, bool headless) {
+void FirstRunRequireData(const fs::path &root, bool headless, [[maybe_unused]] bool launcher) {
 #ifdef SDL_PLATFORM_IOS
     // An iOS app does not quit itself: the launcher stays up until the data is current and the player starts the
     // game.
@@ -75,6 +76,19 @@ void FirstRunRequireData(const fs::path &root, bool headless) {
         }
         IosLauncherRunAt(root.c_str());
         return;
+    }
+#else
+    if (launcher && !headless) {
+        try {
+            if (!LauncherRunDesktop(root)) {
+                CT_LOG_INFO(Main, "Launcher closed");
+                LogFlush();
+                std::exit(kExitOk);
+            }
+        } catch (const std::exception &error) {
+            // Without its window, the setup window below still gets the data.
+            CT_LOG_ERROR(Main, "Launcher: {}", error.what());
+        }
     }
 #endif
     if (!FirstRunDataMissing(root)) {

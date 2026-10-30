@@ -121,7 +121,9 @@ fn main() {
     let root = configured_root
         .as_ref()
         .map(|value| PathBuf::from(value.as_os_str()))
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../games/dc2/port/gameplay"));
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../games/dc2/port/gameplay")
+        });
     println!("cargo:rerun-if-env-changed=OPENCLOUD_GAMEPLAY_ROOT");
     println!("cargo:rerun-if-env-changed=OPENCLOUD_GAMEPLAY_ARCHIVE");
     println!("cargo:rerun-if-changed={}", root.display());
