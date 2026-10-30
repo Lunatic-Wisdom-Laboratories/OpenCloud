@@ -30,17 +30,19 @@ public partial class AssetViewer : Node3D
     [Export] public string InitialModel { get; set; } = string.Empty;
 
     /// <summary>
-    /// Max's model, in the order tried: the edit-mode character in retail PACK form and as
-    /// converted glTF, then the player models <c>SetupMainUnit</c> loads.
+    /// Max's model, in the order tried: the field player model <c>SetupMainUnit</c> loads
+    /// (<c>mainchr/c01_base2</c> to <c>c01_base5</c>, by weapon), then the edit-mode character
+    /// (<c>chara/c01_base</c>, Max in town with the fishing rod), each as retail PACK or glTF.
+    /// Equipment such as the cap is authored for the field rig.
     /// </summary>
     private static readonly string[] MaxCandidates =
     {
-        "chara/c01_base.chr",
-        "chara/c01_base.gltf",
         "mainchr/c01_base2.chr",
         "mainchr/c01_base2.gltf",
         "mainchr/c01_base.chr",
         "mainchr/c01_base.gltf",
+        "chara/c01_base.chr",
+        "chara/c01_base.gltf",
     };
 
     /// <summary>
