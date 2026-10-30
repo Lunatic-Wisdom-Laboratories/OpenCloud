@@ -16,24 +16,28 @@ namespace OpenCloud.Gameplay;
 public static class PlayerModels
 {
     /// <summary>What a player wears; the defaults are Max's starting equipment.</summary>
-    public sealed record Equipment(string Rig, IReadOnlyList<string> Rigs, IReadOnlyList<string> Skins, string? Hat);
+    public sealed record Equipment(string Rig, IReadOnlyList<string> Rigs, IReadOnlyList<string[]> Skins, string? Hat);
 
     /// <summary>
-    /// Max: the field rig first, whose deform frames the equipment files are made for (the
-    /// town rig <c>chara/c01_base</c> keeps a placeholder where the shoes go), then the town
-    /// rig. Clothes then footwear, as <c>SetupMainUnit</c> puts them on.
+    /// Max in town: the town rig, then the field rig as a fallback. Clothes then footwear, as
+    /// <c>SetupMainUnit</c> puts them on; each piece is the first file of its list that exists
+    /// (starting items first).
     /// </summary>
     public static readonly Equipment Max = new(
         "max",
-        new[] { "mainchr/c01_base2.glb", "chara/c01_base.glb" },
-        new[] { "mainchr/c01fuku1.glb", "mainchr/c01sh001.glb" },
+        new[] { "chara/c01_base.glb", "mainchr/c01_base2.glb" },
+        new[]
+        {
+            new[] { "mainchr/c01fuku1.glb" },
+            new[] { "mainchr/c01sh001.glb", "mainchr/c01sh002.glb" },
+        },
         "mainchr/c01ha001.glb");
 
     /// <summary>Monica's town rig; her equipment files are not wired up yet.</summary>
     public static readonly Equipment Monica = new(
         "monica",
         new[] { "chara/c02_base.glb", "mainchr/c02_base2.glb" },
-        Array.Empty<string>(),
+        Array.Empty<string[]>(),
         null);
 
     public static Equipment ForSlot(int slot) => slot == 1 ? Monica : Max;
@@ -53,8 +57,13 @@ public static class PlayerModels
         var rig = FindAll<Node3D>(root).FirstOrDefault(n => n.HasMeta(ModelMeta.DeformFrames));
         if (rig != null)
         {
-            foreach (var skin in equipment.Skins.Where(s => loader.FindFirst(new[] { s }) != null))
+            foreach (var candidates in equipment.Skins)
             {
+                if (loader.FindFirst(candidates) is not { } skin)
+                {
+                    notes.Add($"  not found: {string.Join(", ", candidates)}");
+                    continue;
+                }
                 try
                 {
                     notes.Add($"  {skin}: {loader.ApplySkin(rig, skin)} frames");
