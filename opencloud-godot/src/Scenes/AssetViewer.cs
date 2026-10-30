@@ -427,13 +427,29 @@ public partial class AssetViewer : Node3D
             var attachment = new BoneAttachment3D { Name = MdsModelLoader.SafeNodeName("ref_" + bone) };
             skeleton.AddChild(attachment);
             attachment.BoneName = skeleton.GetBoneName(BoneIndex(skeleton));
-            attachment.AddChild(_loader.Load(path));
+            var part = _loader.Load(path);
+            attachment.AddChild(part);
             _status += $"\n{path}: on {bone}";
+
+            // Diagnostics for placement: the bone's rest and bind (bbp) matrices, and the part's root rest.
+            int index = BoneIndex(skeleton);
+            var rest = skeleton.GetBoneGlobalRest(index);
+            _status += $"\n  {bone} rest {Describe(rest)}";
+            if (skeleton.GetParent()?.GetMeta(MdsModelLoader.BaseMatricesMeta, default(Variant)).Obj is Godot.Collections.Array bases && index < bases.Count)
+                _status += $"\n  {bone} bbp  {Describe(bases[index].AsTransform3D())}";
+            if (FindAll<Skeleton3D>(part).FirstOrDefault() is { } partSkeleton && partSkeleton.GetBoneCount() > 0)
+                _status += $"\n  part root rest {Describe(partSkeleton.GetBoneRest(0))}";
         }
         catch (Exception exception)
         {
             _status += $"\n{path}: {exception.Message}";
         }
+    }
+
+    private static string Describe(Transform3D t)
+    {
+        var euler = t.Basis.GetEuler() * (180.0f / Mathf.Pi);
+        return $"pos ({t.Origin.X:0.###}, {t.Origin.Y:0.###}, {t.Origin.Z:0.###}) rot ({euler.X:0.#}, {euler.Y:0.#}, {euler.Z:0.#}) scale ({t.Basis.Scale.X:0.###}, {t.Basis.Scale.Y:0.###}, {t.Basis.Scale.Z:0.###}) det {t.Basis.Determinant():0.###}";
     }
 
     private void ClearModel()
