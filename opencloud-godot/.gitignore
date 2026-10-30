@@ -1,0 +1,18 @@
+# Godot
+.godot/
+.import/
+export_presets.cfg
+*.translation
+
+# .NET
+bin/
+obj/
+*.user
+
+# Game data never enters the repository.
+data/
+*.zip
+*.iso
+*.ISO
+DATA.DAT
+DATA.HD4
