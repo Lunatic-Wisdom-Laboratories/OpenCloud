@@ -10,10 +10,10 @@ namespace OpenCloud.Assets.Models;
 public sealed partial class MdsModelLoader
 {
     /// <summary>Name of the <see cref="AnimationPlayer"/> added to an animated character's model.</summary>
-    public const string AnimationPlayerName = "AnimationPlayer";
+    public const string AnimationPlayerName = ModelMeta.AnimationPlayerName;
 
     /// <summary>Meta key holding a clip's position in its slot's KEY list (players list clips by name).</summary>
-    public const string KeyIndexMeta = "key_index";
+    public const string KeyIndexMeta = ModelMeta.KeyIndex;
 
     /// <summary>
     /// Loads a character pack the way <c>CCharacter2::LoadChrFile</c> reads its
@@ -152,8 +152,8 @@ public sealed partial class MdsModelLoader
                 var key = intervals[index];
                 string clipName = UniqueClipName(key.Name, used);
                 var animation = MotionAnimationBuilder.Build(lists, SkeletonNodeName, boneNames, rest, key.StartFrame, key.EndFrame, loop: true);
-                animation.SetMeta("game_name", key.Name);
-                animation.SetMeta("step", key.Step);
+                animation.SetMeta(ModelMeta.GameName, key.Name);
+                animation.SetMeta(ModelMeta.Step, key.Step);
                 animation.SetMeta(KeyIndexMeta, index);
                 library.AddAnimation(clipName, animation);
                 LastReport.Animations++;

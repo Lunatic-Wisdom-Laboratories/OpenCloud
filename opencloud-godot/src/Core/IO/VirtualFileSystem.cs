@@ -7,16 +7,14 @@ namespace OpenCloud.Core.IO;
 
 /// <summary>
 /// Single namespace over every mounted game data container. Later mounts take priority, so a
-/// datapack mounted after <c>data.zip</c> overrides its files. Paths can
-/// reach into PACK archives: <c>chara/c01_base.chr/c01_base.mds</c> reads the member
-/// <c>c01_base.mds</c> of <c>chara/c01_base.chr</c>, at any nesting depth.
+/// datapack mounted after <c>data.zip</c> overrides its files.
 /// </summary>
 public sealed class VirtualFileSystem : IDisposable
 {
-    private const int PackCacheCapacity = 32;
+    /// <summary>The report the converter writes at the root of the data it converts.</summary>
+    public const string ConvertedDataMarker = "opencloud-data.json";
 
     private readonly List<IFileSource> _sources = new();
-    private readonly Dictionary<string, PackArchive?> _packCache = new(VfsPath.Comparer);
     private readonly object _lock = new();
 
     /// <summary>Mounted sources, highest priority first.</summary>
@@ -37,82 +35,49 @@ public sealed class VirtualFileSystem : IDisposable
         lock (_lock)
         {
             _sources.Insert(0, source);
-            _packCache.Clear();
         }
         Log?.Invoke($"Mounted {source.Description}");
     }
 
     /// <summary>
-    /// Detects what a path holds and mounts it: a ZIP (<c>data.zip</c>, datapacks), an ISO image,
-    /// a <c>DATA.HD4</c> index, or a directory. A directory that holds <c>data.zip</c>,
-    /// <c>DATA.HD4</c> or a disc image mounts those too, below the loose files beside them.
+    /// Mounts converted game data: a ZIP of it (<c>data.zip</c>, datapacks) or a directory. A
+    /// directory that holds a <c>data.zip</c> mounts it too, below the loose files beside it.
+    /// The original disc formats are refused: the converter turns them into this data once.
     /// Returns the number of sources mounted.
     /// </summary>
     public int MountAuto(string path)
     {
         path = Path.GetFullPath(path);
         if (Directory.Exists(path))
-            return MountDirectory(path);
+        {
+            if (!File.Exists(Path.Combine(path, ConvertedDataMarker)) &&
+                Directory.EnumerateFiles(path).Any(f => f.EndsWith(".iso", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(f).Equals("DATA.HD4", StringComparison.OrdinalIgnoreCase)))
+                throw new NotSupportedException($"{path} holds original game data. Convert it once with opencloud-converter and point the engine at the converted folder.");
+            int mounted = 0;
+            string zip = Path.Combine(path, "data.zip");
+            if (File.Exists(zip))
+            {
+                Mount(new ZipArchiveSource(zip));
+                mounted++;
+            }
+            Mount(new DirectorySource(path));
+            return mounted + 1;
+        }
         if (!File.Exists(path))
             throw new FileNotFoundException("Game data path not found.", path);
 
-        string name = Path.GetFileName(path);
         string extension = Path.GetExtension(path).ToLowerInvariant();
         if (extension == ".zip")
         {
             Mount(new ZipArchiveSource(path));
             return 1;
         }
-        if (extension == ".iso")
-            return MountIso(path);
-        if (string.Equals(name, "DATA.HD4", StringComparison.OrdinalIgnoreCase))
-        {
-            Mount(DataDatSource.Open(path));
-            return 1;
-        }
+        if (extension == ".iso" || string.Equals(Path.GetFileName(path), "DATA.HD4", StringComparison.OrdinalIgnoreCase))
+            throw new NotSupportedException($"{path} is original game data. Convert it once with opencloud-converter and point the engine at the converted folder.");
         throw new NotSupportedException($"Unrecognised game data container: {path}");
     }
 
-    private int MountDirectory(string path)
-    {
-        int mounted = 0;
-        foreach (var file in Directory.EnumerateFiles(path))
-        {
-            string fileName = Path.GetFileName(file);
-            if (fileName.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
-                mounted += MountIso(file);
-        }
-
-        string? index = DataDatSource.FindSibling(Path.Combine(path, "DATA.HD4"), "DATA.HD4");
-        if (index != null && DataDatSource.FindSibling(index, "DATA.DAT") != null)
-        {
-            Mount(DataDatSource.Open(index));
-            mounted++;
-        }
-
-        string? zip = DataDatSource.FindSibling(Path.Combine(path, "data.zip"), "data.zip");
-        if (zip != null)
-        {
-            Mount(new ZipArchiveSource(zip));
-            mounted++;
-        }
-
-        Mount(new DirectorySource(path));
-        return mounted + 1;
-    }
-
-    private int MountIso(string path)
-    {
-        var iso = new IsoSource(path);
-        Mount(iso);
-        var data = iso.TryOpenDataIndex();
-        if (data == null)
-            return 1;
-        Mount(data);
-        return 2;
-    }
-
-    /// <summary>True when a source holds the file. A path into a PACK opens the PACK to check its member.</summary>
+    /// <summary>True when a source holds the file.</summary>
     public bool Exists(string path)
     {
         path = VfsPath.Normalize(path);
@@ -123,10 +88,10 @@ public sealed class VirtualFileSystem : IDisposable
             if (source.Contains(path))
                 return true;
         }
-        return path.Contains('/') && TryReadFromPack(path) != null;
+        return false;
     }
 
-    /// <summary>Reads a file, or returns null when no mounted source (or PACK inside one) holds it.</summary>
+    /// <summary>Reads a file, or returns null when no mounted source holds it.</summary>
     public byte[]? TryRead(string path)
     {
         path = VfsPath.Normalize(path);
@@ -140,65 +105,13 @@ public sealed class VirtualFileSystem : IDisposable
                 return data;
         }
 
-        return TryReadFromPack(path);
+        return null;
     }
 
     public byte[] ReadAllBytes(string path) =>
         TryRead(path) ?? throw new FileNotFoundException($"'{path}' is not in any mounted game data source.", path);
 
-    /// <summary>Opens a PACK archive by its path, caching recently used ones.</summary>
-    public PackArchive? TryOpenPack(string path)
-    {
-        path = VfsPath.Normalize(path);
-        lock (_lock)
-        {
-            if (_packCache.TryGetValue(path, out var cached))
-                return cached;
-        }
-
-        var data = TryRead(path);
-        var pack = data == null ? null : PackArchive.TryParse(data, $"pack {path}");
-        lock (_lock)
-        {
-            if (_packCache.Count >= PackCacheCapacity)
-                _packCache.Clear();
-            _packCache[path] = pack;
-        }
-        return pack;
-    }
-
-    private byte[]? TryReadFromPack(string path)
-    {
-        var parts = path.Split('/');
-        for (int split = parts.Length - 1; split >= 1; split--)
-        {
-            string container = string.Join('/', parts, 0, split);
-            var pack = TryOpenPack(container);
-            if (pack == null)
-                continue;
-
-            string member = string.Join('/', parts, split, parts.Length - split);
-            if (split == parts.Length - 1)
-                return pack.TryRead(member);
-
-            // Nested PACK: read the next level as a member of this one.
-            var inner = pack.TryRead(parts[split]);
-            var innerPack = inner == null ? null : PackArchive.TryParse(inner);
-            return innerPack == null ? null : ReadNested(innerPack, parts, split + 1);
-        }
-        return null;
-    }
-
-    private static byte[]? ReadNested(PackArchive pack, string[] parts, int index)
-    {
-        if (index == parts.Length - 1)
-            return pack.TryRead(parts[index]);
-        var inner = pack.TryRead(parts[index]);
-        var innerPack = inner == null ? null : PackArchive.TryParse(inner);
-        return innerPack == null ? null : ReadNested(innerPack, parts, index + 1);
-    }
-
-    /// <summary>Every file path of every mounted source, without duplicates. PACK members are not expanded.</summary>
+    /// <summary>Every file path of every mounted source, without duplicates.</summary>
     public IEnumerable<string> EnumerateFiles()
     {
         var seen = new HashSet<string>(VfsPath.Comparer);
@@ -225,7 +138,6 @@ public sealed class VirtualFileSystem : IDisposable
             foreach (var source in _sources)
                 source.Dispose();
             _sources.Clear();
-            _packCache.Clear();
         }
     }
 }

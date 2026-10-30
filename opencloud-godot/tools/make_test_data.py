@@ -2,20 +2,17 @@
 """Writes synthetic game data for exercising the loaders without the retail game.
 
 Nothing here comes from the game: the files are tiny hand-made samples of each container and
-format the engine reads (TIM2, IMG, MDT/MDS, PACK, DATA.HD4/DATA.DAT and a ZIP64 data.zip with
-Zstandard entries holding a glTF), placed at the paths the asset viewer looks for Max, plus a small map (map/t/t01/t01.*).
+format the converter reads (TIM2, IMG, MDT/MDS, MOT/WGT/BBP, CFG, PACK, DATA.HD4/DATA.DAT),
+placed at the paths the asset viewer looks for Max, plus a costume, a small map
+(map/t/t01/t01.*), a loose texture and an item table.
 
     python3 tools/make_test_data.py <output-dir>
 
-produces <output-dir>/retail/DATA.HD4 + DATA.DAT and <output-dir>/converted/data.zip. Writing
-data.zip needs the `zstandard` module (pip install zstandard).
+produces <output-dir>/retail/DATA.HD4 + DATA.DAT, ready for opencloud-converter.
 """
-import base64
-import json
 import os
 import struct
 import sys
-import zlib
 
 
 def align(data: bytes, boundary: int) -> bytes:
@@ -218,6 +215,17 @@ MOTION_END;
     return text.encode("cp932")
 
 
+def item_table():
+    # COM item, type, list, active, stack, max, icon texture, icon, message, file, attribute
+    text = """// synthetic item table
+COMINIT;
+COM 1, 1, 0, 1, 1, 1, 0, 0, 0, "", 0;
+COM 2, 22, 0, 1, 9, 99, 0, 1, 0, "", 0;
+COM 3, 5, 0, 1, 1, 1, 0, 2, 0, "fuku1", 64;
+"""
+    return text.encode("cp932")
+
+
 CHARACTER_TAGS = [
     "V2", "NAME", "IMG", "IMG_END", "BODY_SIZE", "SCALE", "MATERIAL_ANIME", "POLY_NUM", "MODEL",
     "SHADOW_MODEL", "OBJECT_NAME", "OBJECT_NAME2", "MOTION", "SHADOW_MOTION", "OUTLINE",
@@ -373,83 +381,12 @@ def map_files(textures):
     ]
 
 
-# --- data.zip (ZIP64, Zstandard, 64-byte aligned payloads) ---------------------------------
-
-def png_rgba(width, height, rgba):
-    raw = b"".join(b"\0" + rgba[y * width * 4:(y + 1) * width * 4] for y in range(height))
-
-    def chunk(kind, payload):
-        return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload))
-
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
-
-
-def gltf_triangle():
-    positions = struct.pack("<9f", -0.5, 0, 0, 0.5, 0, 0, 0, 1, 0)
-    uvs = struct.pack("<6f", 0, 1, 1, 1, 0.5, 0)
-    binary = positions + uvs
-    document = {
-        "asset": {"version": "2.0"},
-        "scene": 0,
-        "scenes": [{"name": "c01_base", "nodes": [0]}],
-        "nodes": [{"name": "body", "mesh": 0}],
-        "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "TEXCOORD_0": 1}, "material": 0}]}],
-        "materials": [{"pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}, "doubleSided": True}],
-        "textures": [{"source": 0}],
-        "images": [{"uri": "../textures/chara/c01%20base_0.png"}],
-        "buffers": [{"uri": "c01_base.gltf.bin", "byteLength": len(binary)}],
-        "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36}, {"buffer": 0, "byteOffset": 36, "byteLength": 24}],
-        "accessors": [
-            {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [-0.5, 0, 0], "max": [0.5, 1, 0]},
-            {"bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC2"},
-        ],
-    }
-    return json.dumps(document, separators=(",", ":")).encode(), binary
-
-
-def write_zip64(path, entries):
-    import zstandard
-
-    out = bytearray()
-    central = bytearray()
-    for name, payload in entries:
-        stored = name.lower().endswith((".png", ".mp4"))
-        data = payload if stored else zstandard.ZstdCompressor(level=1, write_content_size=True).compress(payload)
-        method, version = (0, 45) if stored else (93, 63)
-        crc = zlib.crc32(payload)
-        encoded = name.encode()
-        local_offset = len(out)
-        zip64 = struct.pack("<HHQQ", 1, 16, len(payload), len(data))
-        fixed = 30 + len(encoded) + len(zip64)
-        padding = -(local_offset + fixed) % 64
-        if padding and padding < 4:
-            padding += 64
-        pad = struct.pack("<HH", 0xD935, padding - 4) + b"\0" * (padding - 4) if padding else b""
-        out += struct.pack("<IHHHHHIIIHH", 0x04034B50, version, 0x800, method, 0, 0x21, crc,
-                           0xFFFFFFFF, 0xFFFFFFFF, len(encoded), len(zip64) + len(pad)) + encoded + zip64 + pad
-        assert len(out) % 64 == 0
-        out += data
-        extra = struct.pack("<HHQQQ", 1, 24, len(payload), len(data), local_offset)
-        central += struct.pack("<IHHHHHHIIIHHHHHII", 0x02014B50, version, version, 0x800, method, 0, 0x21, crc,
-                               0xFFFFFFFF, 0xFFFFFFFF, len(encoded), len(extra), 0, 0, 0, 0, 0xFFFFFFFF) + encoded + extra
-    directory_offset = len(out)
-    out += central
-    zip64_end = len(out)
-    out += struct.pack("<IQHHIIQQQQ", 0x06064B50, 44, 63, 63, 0, 0, len(entries), len(entries), len(central), directory_offset)
-    out += struct.pack("<IIQI", 0x07064B50, 0, zip64_end, 1)
-    out += struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, 0xFFFF, 0xFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0)
-    with open(path, "wb") as handle:
-        handle.write(out)
-
-
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
     root = sys.argv[1]
     retail = os.path.join(root, "retail")
-    converted = os.path.join(root, "converted")
     os.makedirs(retail, exist_ok=True)
-    os.makedirs(converted, exist_ok=True)
 
     textures = img_archive([("tex_checker", checker_tim2()), ("tex_alpha", alpha_tim2())])
     character = pack([
@@ -471,21 +408,13 @@ def main():
         ("c01f.bbp", bind_pose(COSTUME_FRAMES)),
         ("c01f.img", textures),
     ])
-    header, data = data_dat([("chara/c01_base.chr", character), ("mainchr/c01fuku1.chr", costume), ("chara/c99_binary.chr", binary_character), ("menu/sample.tm2", checker_tim2())] + map_files(textures))
+    header, data = data_dat([("chara/c01_base.chr", character), ("mainchr/c01fuku1.chr", costume), ("chara/c99_binary.chr", binary_character), ("menu/sample.tm2", checker_tim2()), ("menu/cfg7/comdat.cfg", item_table())] + map_files(textures))
     with open(os.path.join(retail, "DATA.HD4"), "wb") as handle:
         handle.write(header)
     with open(os.path.join(retail, "DATA.DAT"), "wb") as handle:
         handle.write(data)
 
-    document, binary = gltf_triangle()
-    checker = bytes([255, 255, 255, 255, 255, 0, 0, 255] * 2 + [255, 0, 0, 255, 255, 255, 255, 255] * 2)
-    write_zip64(os.path.join(converted, "data.zip"), [
-        ("chara/c01_base.gltf", document),
-        ("chara/c01_base.gltf.bin", binary),
-        ("textures/chara/c01 base_0.png", png_rgba(2, 2, checker)),
-        ("gameplay/readme.json", b'{"note":"synthetic"}'),
-    ])
-    print(f"wrote {retail} and {converted}")
+    print(f"wrote {retail}")
 
 
 if __name__ == "__main__":

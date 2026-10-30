@@ -3,33 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using OpenCloud.Assets.Models;
-using OpenCloud.Assets.Textures;
+using OpenCloud.Core;
 using OpenCloud.Core.IO;
-using OpenCloud.Core.Scripts;
-using OpenCloud.Rendering;
 
 namespace OpenCloud.Assets.Maps;
 
 /// <summary>
-/// Loads a map the way <c>CScene::LoadMap</c> does and builds it as
-/// Godot nodes. A map <c>dir/name</c> is a set of files sharing one stem:
-/// <list type="bullet">
-/// <item><c>.map</c>: script read twice, for the map information (<see cref="MapInfo"/>) and the
-/// layout (<see cref="MapLayout"/>);</item>
-/// <item><c>.ipk</c>: PACK of the IMG texture files the information names;</item>
-/// <item><c>.mpk</c>: PACK of the PCP model lists (<see cref="MapModelList"/>);</item>
-/// <item><c>.sky</c>: sky pack (<c>map/def.sky</c> when the map has none), see <see cref="MapSky"/>;</item>
-/// <item><c>.cfg</c>, <c>.efp</c>: water, draw-off areas, extra event points and effects (not read yet).</item>
-/// </list>
-/// Each placed part is a <see cref="Node3D"/> with the placement's transform; its pieces hold
-/// the meshes of their models, positioned as <c>mgCFrame::GetLocalMatrix</c> positions a frame.
-/// Collision models become <see cref="StaticBody3D"/>s with a hidden debug mesh.
+/// Builds a converted map (<see cref="MapDocument"/>) as Godot nodes, the way <c>CScene::LoadMap</c>
+/// lays it out: each placement of a part definition is a <see cref="Node3D"/> with the
+/// placement's transform; its pieces hold copies of their models from the map's model lists,
+/// positioned as <c>mgCFrame::GetLocalMatrix</c> positions a frame. Collision models become
+/// <see cref="StaticBody3D"/>s with a hidden debug mesh; the sky is a <see cref="MapSky"/>.
 /// </summary>
 public sealed class MapLoader
 {
-    /// <summary>Retail <c>mds_list_num</c>: the scene holds at most eight model lists.</summary>
-    public const int MaxModelLists = 8;
-
     /// <summary>Physics layer of walkable collision (MDS type 1).</summary>
     public const uint CollisionLayer = 1;
 
@@ -43,35 +30,37 @@ public sealed class MapLoader
     public const string FuncPointGroup = "map_func_points";
 
     private readonly VirtualFileSystem _vfs;
-    private readonly MdsModelLoader _models;
+    private readonly ModelLoader _models;
 
-    public MapLoader(VirtualFileSystem vfs, MdsModelLoader models)
+    public MapLoader(VirtualFileSystem vfs, ModelLoader models)
     {
         _vfs = vfs;
         _models = models;
     }
 
-    /// <summary>Every map script of the mounted data.</summary>
+    /// <summary>Every converted map of the mounted data.</summary>
     public static IEnumerable<string> EnumerateMaps(VirtualFileSystem vfs) =>
-        vfs.EnumerateFiles("map")
-            .Where(path => path.StartsWith("map/", StringComparison.OrdinalIgnoreCase))
+        vfs.EnumerateFiles()
+            .Where(path => path.StartsWith("map/", StringComparison.OrdinalIgnoreCase) && path.EndsWith(MapDocument.Extension, StringComparison.OrdinalIgnoreCase))
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// <c>GetMapPath</c> (mapselect): <c>s01</c> → <c>map/s/s01/s01.map</c>, <c>d01f01</c> →
-    /// <c>map/d/d01/f01/d01f01.map</c>. A path that already ends in <c>.map</c> is kept.
+    /// <c>GetMapPath</c> (mapselect): <c>s01</c> → <c>map/s/s01/s01.map.json</c>, <c>d01f01</c> →
+    /// <c>map/d/d01/f01/d01f01.map.json</c>. A path that already names a map document is kept.
     /// </summary>
     public static string MapPath(string name)
     {
         name = VfsPath.Normalize(name);
-        if (VfsPath.GetExtension(name) == "map")
+        if (name.EndsWith(MapDocument.Extension, StringComparison.OrdinalIgnoreCase))
             return name;
+        if (VfsPath.GetExtension(name) == "map")
+            return MapDocument.PathFor(name);
         var path = "map/" + name[..Math.Min(1, name.Length)] + "/";
         if (name.Length >= 3)
             path += name[..3] + "/";
         if (name.Length >= 6)
             path += name[3..6] + "/";
-        return path + name + ".map";
+        return path + name + MapDocument.Extension;
     }
 
     /// <summary>Statistics of the last load, for the viewer and the smoke test.</summary>
@@ -79,7 +68,6 @@ public sealed class MapLoader
     {
         public int ModelLists;
         public int Models;
-        public int Textures;
         public int Placements;
         public int PlacedPieces;
         public int MeshInstances;
@@ -91,109 +79,82 @@ public sealed class MapLoader
         public readonly List<string> Notes = new();
     }
 
-    /// <summary>A model of the lists, built once and shared by every piece that uses it.</summary>
+    /// <summary>A list entry's model, loaded once and copied for every piece that uses it.</summary>
     private sealed class ModelTemplate
     {
         public required MapModelEntry Entry { get; init; }
-        public MdsFile? Mds { get; init; }
-        public Dictionary<int, ArrayMesh> Meshes { get; init; } = new();
-        public PackArchive? CharacterPack { get; init; }
+        public required Node3D Scene { get; init; }
     }
 
     private readonly Dictionary<string, ModelTemplate?> _templates = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<MapModelList> _lists = new();
-    private TextureLibrary _textures = new();
+    private readonly List<(string Directory, MapModelListDocument List)> _lists = new();
     private Report _report = new();
 
     public LoadedMap Load(string path, float clock = 12.0f)
     {
         path = MapPath(path);
-        var script = _vfs.TryRead(path) ?? throw new System.IO.FileNotFoundException($"Map script '{path}' not found.");
-        string stem = path[..^".map".Length];
+        var json = _vfs.TryRead(path) ?? throw new System.IO.FileNotFoundException($"Map '{path}' not found in the converted data.");
+        var document = MapDocument.FromJson(JsonValues.Parse(json, path), path);
+        string stem = path[..^MapDocument.Extension.Length];
 
         _report = new Report();
-        _templates.Clear();
+        FreeTemplates();
         _lists.Clear();
-        _textures = new TextureLibrary();
-        _models.ResetReport();
+        LoadModelLists(document);
 
-        var info = MapInfo.Parse(GameScript.Parse(script, MapInfo.Tags));
-        var layout = MapLayout.Parse(GameScript.Parse(script, MapLayout.Tags));
-        LoadTextures(stem, info);
-        LoadModelLists(stem, info);
-
-        var root = new Node3D { Name = MdsModelLoader.SafeNodeName(VfsPath.GetFileName(stem)) };
-        var map = new LoadedMap { Path = path, Root = root, Info = info, Layout = layout, Report = _report, Clock = clock };
+        var root = new Node3D { Name = NodeNames.Safe(VfsPath.GetFileName(stem)) };
+        var map = new LoadedMap { Path = path, Root = root, Info = document.Info, Layout = document.Layout, Report = _report, Clock = clock };
 
         var parts = new Node3D { Name = "Parts" };
         root.AddChild(parts);
-        foreach (var placement in layout.Placements)
+        foreach (var placement in document.Layout.Placements)
             PlaceParts(map, parts, placement);
 
-        if (layout.FuncPoints.Count > 0)
+        if (document.Layout.FuncPoints.Count > 0)
         {
             var points = new Node3D { Name = "FuncPoints" };
             root.AddChild(points);
-            foreach (var point in layout.FuncPoints)
+            foreach (var point in document.Layout.FuncPoints)
                 AddFuncPoint(points, point);
         }
 
-        map.Sky = LoadSky(stem, info);
-        if (map.Sky != null)
-            root.AddChild(map.Sky);
+        if (document.Sky != null)
+        {
+            try
+            {
+                map.Sky = MapSky.Load(_vfs, _models, document.Sky);
+                root.AddChild(map.Sky);
+            }
+            catch (Exception exception) when (exception is System.IO.IOException or System.IO.InvalidDataException)
+            {
+                _report.Notes.Add($"sky: {exception.Message}");
+            }
+        }
 
-        if (_vfs.Exists(stem + ".cfg"))
-            _report.Notes.Add("map .cfg (water, draw-off areas, extra event points) is not read yet");
+        FreeTemplates();
         map.SetClock(clock);
         return map;
     }
 
-    /// <summary><c>CMap::LoadData</c>: enters each IMG the map names from its <c>.ipk</c>.</summary>
-    private void LoadTextures(string stem, MapInfo info)
+    private void FreeTemplates()
     {
-        var ipk = _vfs.TryOpenPack(stem + ".ipk");
-        if (ipk == null)
-        {
-            if (info.TexturePacks.Count > 0)
-                _report.Notes.Add($"{stem}.ipk not found: {info.TexturePacks.Count} texture files missing");
-            return;
-        }
-        foreach (var name in info.TexturePacks)
-        {
-            var data = ipk.TryRead(name);
-            if (data == null)
-            {
-                _report.Notes.Add($"texture file {name} not in {stem}.ipk");
-                continue;
-            }
-            MdsModelLoader.TryAddTextures(_textures, name, data);
-        }
-        _report.Textures = _textures.Count;
+        foreach (var template in _templates.Values)
+            template?.Scene.Free();
+        _templates.Clear();
     }
 
-    /// <summary><c>CMap::LoadData</c>: loads each PCP the map names from its <c>.mpk</c>.</summary>
-    private void LoadModelLists(string stem, MapInfo info)
+    private void LoadModelLists(MapDocument document)
     {
-        var mpk = _vfs.TryOpenPack(stem + ".mpk");
-        if (mpk == null)
+        foreach (var path in document.ModelLists)
         {
-            if (info.ModelPacks.Count > 0)
-                _report.Notes.Add($"{stem}.mpk not found: {info.ModelPacks.Count} model lists missing");
-            return;
-        }
-        foreach (var name in info.ModelPacks)
-        {
-            if (_lists.Count >= MaxModelLists || _lists.Any(l => string.Equals(l.Name, name, StringComparison.Ordinal)))
-                continue;
-            var data = mpk.TryRead(name);
-            var pack = data == null ? null : PackArchive.TryParse(data, name);
-            if (pack == null)
+            var json = _vfs.TryRead(path);
+            if (json == null)
             {
-                _report.Notes.Add($"model list {name} not in {stem}.mpk");
+                _report.Notes.Add($"model list {path} not found");
                 continue;
             }
-            var list = MapModelList.Parse(name, pack);
-            _lists.Add(list);
+            var list = MapModelListDocument.FromJson(JsonValues.Parse(json, path), path);
+            _lists.Add((VfsPath.GetDirectory(path), list));
             _report.Models += list.Entries.Count;
         }
         _report.ModelLists = _lists.Count;
@@ -211,44 +172,23 @@ public sealed class MapLoader
         ModelTemplate? template = null;
         for (int i = _lists.Count - 1; i >= 0 && template == null; i--)
         {
-            var entry = _lists[i].Find(name);
-            if (entry != null)
-                template = BuildTemplate(_lists[i], entry);
+            var (directory, list) = _lists[i];
+            var entry = list.Find(name);
+            if (entry == null)
+                continue;
+            try
+            {
+                template = new ModelTemplate { Entry = entry, Scene = _models.Load(VfsPath.Combine(directory, entry.File)) };
+            }
+            catch (Exception exception) when (exception is System.IO.IOException or System.IO.InvalidDataException)
+            {
+                _report.Notes.Add($"{list.Name}/{entry.Name}: {exception.Message}");
+            }
         }
         _templates[name] = template;
         if (template == null)
             _report.MissingModels.Add(name);
         return template;
-    }
-
-    private ModelTemplate? BuildTemplate(MapModelList list, MapModelEntry entry)
-    {
-        var data = list.Pack.TryRead(entry.Name);
-        if (data == null)
-            return null;
-
-        if (entry.Type == MapModelType.Character)
-        {
-            var pack = PackArchive.TryParse(data, entry.Name);
-            return pack == null ? null : new ModelTemplate { Entry = entry, CharacterPack = pack };
-        }
-
-        if (!MdsFile.LooksLikeMds(data))
-        {
-            _report.Notes.Add($"{list.Name}/{entry.Name} is not an MDS scene");
-            return null;
-        }
-        try
-        {
-            var mds = MdsFile.Parse(data);
-            var meshes = entry.IsDrawn ? _models.BuildObjectMeshes(mds, _textures) : new Dictionary<int, ArrayMesh>();
-            return new ModelTemplate { Entry = entry, Mds = mds, Meshes = meshes };
-        }
-        catch (System.IO.InvalidDataException exception)
-        {
-            _report.Notes.Add($"{list.Name}/{entry.Name}: {exception.Message}");
-            return null;
-        }
     }
 
     /// <summary>
@@ -267,7 +207,7 @@ public sealed class MapLoader
 
         var node = new Node3D
         {
-            Name = MdsModelLoader.SafeNodeName(placement.Name),
+            Name = NodeNames.Safe(placement.Name),
             Transform = MapTransforms.Frame(placement.Position, placement.Rotation, placement.Scale, Transform3D.Identity),
         };
         node.SetMeta("definition", definition.Name);
@@ -285,31 +225,33 @@ public sealed class MapLoader
                 continue;
             _report.PlacedPieces++;
 
-            if (template.CharacterPack != null)
+            if (template.Entry.Type == MapModelType.Character)
             {
-                AddCharacter(map, node, placement, piece, template);
+                var character = (Node3D)template.Scene.Duplicate();
+                character.Name = NodeNames.Safe(piece.Name);
+                character.Transform = MapTransforms.Frame(piece.Position, piece.Rotation, piece.Scale, Transform3D.Identity);
+                node.AddChild(character);
+                map.Pieces.Add(new LoadedMap.PlacedPiece(character, placement, piece));
+                _report.Characters++;
                 continue;
             }
 
-            var mds = template.Mds!;
-            var transforms = MdsModelLoader.ObjectTransforms(mds, local => MapTransforms.Frame(piece.Position, piece.Rotation, piece.Scale, local));
+            var pieceNode = PlacePiece(template, piece);
             if (!template.Entry.IsDrawn)
             {
                 collision ??= CreateCollisionBody(node);
-                AddCollision(collision, piece, template, transforms);
+                AddCollision(collision, piece, template, pieceNode);
+                pieceNode.Free();
                 continue;
             }
 
-            var pieceNode = new Node3D { Name = MdsModelLoader.SafeNodeName(piece.Name) };
-            node.AddChild(pieceNode);
-            foreach (var (index, mesh) in template.Meshes)
+            foreach (var mesh in ModelLoader.FindAll<MeshInstance3D>(pieceNode))
             {
-                var instance = new MeshInstance3D { Name = MdsModelLoader.SafeNodeName(mds.Objects[index].BaseName), Mesh = mesh, Transform = transforms[index] };
                 if (definition.NoLight)
-                    instance.Layers = NoLightRenderLayer;
-                pieceNode.AddChild(instance);
+                    mesh.Layers = NoLightRenderLayer;
                 _report.MeshInstances++;
             }
+            node.AddChild(pieceNode);
             map.Pieces.Add(new LoadedMap.PlacedPiece(pieceNode, placement, piece));
         }
 
@@ -317,21 +259,20 @@ public sealed class MapLoader
             AddFuncPoint(node, point);
     }
 
-    private void AddCharacter(LoadedMap map, Node3D parent, MapPlacement placement, MapPieceDefinition piece, ModelTemplate template)
+    /// <summary>
+    /// A copy of a model's frames for one piece: each root frame keeps its own matrix inside the
+    /// piece transform (<c>MapTransforms.Frame</c>), children follow their parents.
+    /// </summary>
+    private static Node3D PlacePiece(ModelTemplate template, MapPieceDefinition piece)
     {
-        try
+        var pieceNode = new Node3D { Name = NodeNames.Safe(piece.Name) };
+        foreach (var frame in template.Scene.GetChildren().OfType<Node3D>())
         {
-            var character = _models.LoadPack(template.CharacterPack!, template.Entry.Name, _textures);
-            character.Name = MdsModelLoader.SafeNodeName(piece.Name);
-            character.Transform = MapTransforms.Frame(piece.Position, piece.Rotation, piece.Scale, Transform3D.Identity);
-            parent.AddChild(character);
-            map.Pieces.Add(new LoadedMap.PlacedPiece(character, placement, piece));
-            _report.Characters++;
+            var copy = (Node3D)frame.Duplicate();
+            copy.Transform = MapTransforms.Frame(piece.Position, piece.Rotation, piece.Scale, frame.Transform);
+            pieceNode.AddChild(copy);
         }
-        catch (System.IO.InvalidDataException exception)
-        {
-            _report.Notes.Add($"character {template.Entry.Name}: {exception.Message}");
-        }
+        return pieceNode;
     }
 
     private static StaticBody3D CreateCollisionBody(Node3D parent)
@@ -345,9 +286,10 @@ public sealed class MapLoader
     /// A collision piece (<c>LoadCollisionFile</c>): its triangles become a concave shape, on the
     /// walk or camera layer, plus a debug mesh shown with the viewer's collision toggle.
     /// </summary>
-    private void AddCollision(StaticBody3D body, MapPieceDefinition piece, ModelTemplate template, Transform3D[] transforms)
+    private void AddCollision(StaticBody3D body, MapPieceDefinition piece, ModelTemplate template, Node3D pieceNode)
     {
-        var corners = MdsModelLoader.CollectTriangles(template.Mds!, transforms);
+        var corners = new List<Vector3>();
+        CollectTriangles(pieceNode, Transform3D.Identity, corners);
         if (corners.Count == 0)
             return;
         bool camera = template.Entry.Type == MapModelType.CameraCollision;
@@ -355,29 +297,38 @@ public sealed class MapLoader
 
         var shape = new ConcavePolygonShape3D { BackfaceCollision = true };
         shape.SetFaces(corners.ToArray());
-        body.AddChild(new CollisionShape3D { Name = MdsModelLoader.SafeNodeName(piece.Name), Shape = shape });
+        body.AddChild(new CollisionShape3D { Name = NodeNames.Safe(piece.Name), Shape = shape });
         _report.CollisionTriangles += corners.Count / 3;
 
         var debug = DebugMesh(corners, camera ? new Color(1.0f, 0.6f, 0.1f, 0.35f) : new Color(0.1f, 0.9f, 0.4f, 0.35f));
-        debug.Name = MdsModelLoader.SafeNodeName(piece.Name) + "_debug";
+        debug.Name = NodeNames.Safe(piece.Name) + "_debug";
         debug.Visible = false;
         debug.AddToGroup(CollisionGroup);
         body.AddChild(debug);
+    }
+
+    /// <summary>Every triangle of the meshes under a node, in the node's parent space.</summary>
+    private static void CollectTriangles(Node node, Transform3D parent, List<Vector3> corners)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is not Node3D spatial)
+                continue;
+            var transform = parent * spatial.Transform;
+            if (spatial is MeshInstance3D { Mesh: { } mesh })
+            {
+                foreach (var corner in mesh.GetFaces())
+                    corners.Add(transform * corner);
+            }
+            CollectTriangles(spatial, transform, corners);
+        }
     }
 
     private static MeshInstance3D DebugMesh(List<Vector3> corners, Color colour)
     {
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
-        // Reverse each triangle to Godot's clockwise front faces.
-        var vertices = new Vector3[corners.Count];
-        for (int i = 0; i + 2 < corners.Count; i += 3)
-        {
-            vertices[i] = corners[i];
-            vertices[i + 1] = corners[i + 2];
-            vertices[i + 2] = corners[i + 1];
-        }
-        arrays[(int)Mesh.ArrayType.Vertex] = vertices;
+        arrays[(int)Mesh.ArrayType.Vertex] = corners.ToArray();
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         mesh.SurfaceSetMaterial(0, new StandardMaterial3D
@@ -409,7 +360,7 @@ public sealed class MapLoader
         };
         var marker = new MeshInstance3D
         {
-            Name = MdsModelLoader.SafeNodeName($"{point.Type}_{point.Name}"),
+            Name = NodeNames.Safe($"{point.Type}_{point.Name}"),
             Mesh = MarkerMesh,
             MaterialOverride = new StandardMaterial3D
             {
@@ -434,30 +385,6 @@ public sealed class MapLoader
         parent.AddChild(marker);
     }
 
-    /// <summary>
-    /// The map's sky pack: <c>&lt;stem&gt;.sky</c>, else <c>map/def.sky</c>, loaded when SKY_INFO
-    /// enables it (<c>CScene::LoadMapFromMemory</c>).
-    /// </summary>
-    private MapSky? LoadSky(string stem, MapInfo info)
-    {
-        if (info.SkyInfo == 0)
-            return null;
-        var pack = _vfs.TryOpenPack(stem + ".sky") ?? _vfs.TryOpenPack("map/def.sky");
-        if (pack == null)
-        {
-            _report.Notes.Add("sky pack not found");
-            return null;
-        }
-        try
-        {
-            return MapSky.Build(pack, _models);
-        }
-        catch (System.IO.InvalidDataException exception)
-        {
-            _report.Notes.Add($"sky: {exception.Message}");
-            return null;
-        }
-    }
 }
 
 /// <summary>A built map: its nodes, the data they came from, and the time-of-day state.</summary>

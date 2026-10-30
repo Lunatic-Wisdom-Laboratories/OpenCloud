@@ -101,5 +101,37 @@ public sealed partial class MdsModelLoader
         return corners;
     }
 
+    /// <summary>
+    /// The collision triangles of every object, in the object's own space, as unlit meshes
+    /// without materials (Godot's clockwise winding). The engine builds collision shapes from them.
+    /// </summary>
+    public static Dictionary<int, ArrayMesh> BuildCollisionMeshes(MdsFile mds)
+    {
+        var meshes = new Dictionary<int, ArrayMesh>();
+        foreach (var obj in mds.Objects)
+        {
+            if (obj.Model == null)
+                continue;
+            var single = new MdsFile { Objects = new[] { new MdsObject { Index = 0, Name = obj.Name, Parent = -1, Matrix = obj.Matrix, Model = obj.Model } } };
+            var corners = CollectTriangles(single, new[] { Transform3D.Identity });
+            if (corners.Count == 0)
+                continue;
+            var vertices = new Vector3[corners.Count];
+            for (int i = 0; i + 2 < corners.Count; i += 3)
+            {
+                vertices[i] = corners[i];
+                vertices[i + 1] = corners[i + 2];
+                vertices[i + 2] = corners[i + 1];
+            }
+            var arrays = new Godot.Collections.Array();
+            arrays.Resize((int)Mesh.ArrayType.Max);
+            arrays[(int)Mesh.ArrayType.Vertex] = vertices;
+            var mesh = new ArrayMesh();
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            meshes[obj.Index] = mesh;
+        }
+        return meshes;
+    }
+
     private static Vector3 ToVector(System.Numerics.Vector4 v) => new(v.X, v.Y, v.Z);
 }

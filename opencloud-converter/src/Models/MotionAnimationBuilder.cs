@@ -26,7 +26,7 @@ public static class MotionAnimationBuilder
     /// Motion frames per second: the game steps a motion once per 30 Hz game frame by its
     /// <c>KEY</c> step.
     /// </summary>
-    public const float FramesPerSecond = 30.0f;
+    public const float FramesPerSecond = ModelMeta.FramesPerSecond;
 
     /// <summary>Thresholds of the game's interpolation (MotionProc, QuatSlerp).</summary>
     private const float StartEpsilon = 0.001f;

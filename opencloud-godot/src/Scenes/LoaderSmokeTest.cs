@@ -34,51 +34,34 @@ public partial class LoaderSmokeTest : Node
         var skins = args.Where(a => a.StartsWith("--skin=", StringComparison.Ordinal)).Select(a => a["--skin=".Length..]).ToList();
         var textures = args.Where(a => a.StartsWith("--texture=", StringComparison.Ordinal)).Select(a => a["--texture=".Length..]).ToList();
         var maps = args.Where(a => a.StartsWith("--map=", StringComparison.Ordinal)).Select(a => a["--map=".Length..]).ToList();
-        var dumps = args.Where(a => a.StartsWith("--dump=", StringComparison.Ordinal)).Select(a => a["--dump=".Length..]).ToList();
-        if (dumps.Count > 0)
-        {
-            string? output = args.FirstOrDefault(a => a.StartsWith("--out=", StringComparison.Ordinal))?["--out=".Length..];
-            var text = new System.Text.StringBuilder();
-            var frameFilter = args.FirstOrDefault(a => a.StartsWith("--frames=", StringComparison.Ordinal))?["--frames=".Length..]
-                .Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
-            foreach (var path in dumps)
-                DumpPack(vfs, path, text, frameFilter);
-            if (output != null)
-                System.IO.File.WriteAllText(output, text.ToString());
-            else
-                GD.Print(text.ToString());
-            GetTree().Quit(0);
-            return;
-        }
         if (models.Count == 0 && maps.Count == 0)
-            models.Add("chara/c01_base.chr");
+            models.Add("chara/c01_base.glb");
 
         var attaches = args.Where(a => a.StartsWith("--attach=", StringComparison.Ordinal)).Select(a => a["--attach=".Length..]).ToList();
         if (attaches.Count > 0)
         {
-            ShowAttachedParts(new GameModelLoader(vfs), models[0], skins, attaches);
+            ShowAttachedParts(new ModelLoader(vfs), models[0], skins, attaches);
             return;
         }
 
-        var loader = new GameModelLoader(vfs);
+        var loader = new ModelLoader(vfs);
         foreach (var path in models)
         {
             try
             {
                 var node = loader.Load(path);
+                var document = loader.LastDocument;
                 foreach (var skin in skins)
                 {
-                    var model = FindAll<Node3D>(node).FirstOrDefault(n => n.HasMeta(MdsModelLoader.DeformFramesMeta));
+                    var model = FindAll<Node3D>(node).FirstOrDefault(n => n.HasMeta(ModelMeta.DeformFrames));
                     if (model != null)
-                        GD.Print($"  costume {skin}: {loader.Mds.ApplySkin(model, skin)} frames");
+                        GD.Print($"  costume {skin}: {loader.ApplySkin(model, skin)} frames");
                 }
                 Describe(node, 1);
-                if (VfsPath.GetExtension(path) is not ("gltf" or "glb"))
+                if (document != null)
                 {
-                    var r = loader.Mds.LastReport;
-                    GD.Print($"  report: frames {r.Objects}, meshes {r.Meshes} ({r.SkinnedMeshes} skinned), triangles {r.Triangles}, skipped {r.SkippedPrimitives}, animations {r.Animations}, missing textures [{string.Join(", ", r.MissingTextures)}]");
-                    foreach (var note in r.Notes)
-                        GD.Print($"  note: {note}");
+                    foreach (var part in document.Models)
+                        GD.Print($"  document: {document.Kind} {part.Node}: frames {part.Frames.Length}, deform [{string.Join(", ", part.DeformFrames)}], base matrices {part.BaseMatrices.Length}, actions {part.Animations.Count}");
                 }
                 AddChild(node);
                 PlayEveryAnimation(node);
@@ -92,11 +75,10 @@ public partial class LoaderSmokeTest : Node
             }
         }
 
-        var textureLoader = new TextureLoader(vfs);
         foreach (var path in textures)
         {
             var library = new TextureLibrary();
-            if (!textureLoader.LoadInto(library, path))
+            if (!TextureDocument.LoadInto(vfs, library, path))
             {
                 GD.PrintErr($"texture {path}: not loaded");
                 failures++;
@@ -106,7 +88,22 @@ public partial class LoaderSmokeTest : Node
                 GD.Print($"texture {path}: {texture.Name} {DescribeTexture(texture.Texture)} alpha={texture.HasTransparency}");
         }
 
-        var mapLoader = new MapLoader(vfs, new MdsModelLoader(vfs));
+        if (args.Contains("--items"))
+        {
+            try
+            {
+                var catalog = OpenCloud.Game.Items.ItemCatalog.Load(vfs);
+                GD.Print($"items: {catalog.Count}, fingerprint {catalog.Fingerprint:x16}, " +
+                         string.Join(" ", catalog.Records.Select(r => $"[{r.ItemNo} {r.Type} {r.StackNum}/{r.MaxNum} {r.FileName} {r.Attribute}]")));
+            }
+            catch (Exception exception)
+            {
+                GD.PrintErr($"items: {exception.Message}");
+                failures++;
+            }
+        }
+
+        var mapLoader = new MapLoader(vfs, new ModelLoader(vfs));
         foreach (var path in maps)
         {
             try
@@ -135,7 +132,7 @@ public partial class LoaderSmokeTest : Node
         var info = map.Info;
         GD.Print($"map {map.Path}: textures {string.Join(",", info.TexturePacks)}, models {string.Join(",", info.ModelPacks)}, lighting sets {info.LightingSets.Count(s => s != null)}, sky info {info.SkyInfo}");
         GD.Print($"  layout: parts {map.Layout.Parts.Count} [{string.Join(", ", map.Layout.Parts.Select(p => $"{p.Name}: {p.Pieces.Count} pieces, {p.FuncPoints.Count} points"))}], placements {map.Layout.Placements.Count}, map points {map.Layout.FuncPoints.Count}");
-        GD.Print($"  report: lists {r.ModelLists} ({r.Models} models), textures {r.Textures}, placed {r.Placements}, pieces {r.PlacedPieces}, meshes {r.MeshInstances}, characters {r.Characters}, collision tris {r.CollisionTriangles}, points {r.FuncPoints}");
+        GD.Print($"  report: lists {r.ModelLists} ({r.Models} models), placed {r.Placements}, pieces {r.PlacedPieces}, meshes {r.MeshInstances}, characters {r.Characters}, collision tris {r.CollisionTriangles}, points {r.FuncPoints}");
         GD.Print($"  missing models [{string.Join(", ", r.MissingModels)}], missing parts [{string.Join(", ", r.MissingParts)}]");
         foreach (var note in r.Notes)
             GD.Print($"  note: {note}");
@@ -188,7 +185,7 @@ public partial class LoaderSmokeTest : Node
                 var animation = player.GetAnimation(name);
                 player.Play(name);
                 player.Seek(animation.Length / 2, true);
-                GD.Print($"  animation {name}: length {animation.Length:0.###}s, tracks {animation.GetTrackCount()}, game name {(animation.HasMeta("game_name") ? animation.GetMeta("game_name") : "-")}");
+                GD.Print($"  animation {name}: length {animation.Length:0.###}s, tracks {animation.GetTrackCount()}, game name {(animation.HasMeta(ModelMeta.GameName) ? animation.GetMeta(ModelMeta.GameName) : "-")}, step {(animation.HasMeta(ModelMeta.Step) ? animation.GetMeta(ModelMeta.Step) : "-")}");
                 foreach (var skeleton in FindAll<Skeleton3D>(player.GetParent()))
                 {
                     for (int bone = 0; bone < skeleton.GetBoneCount(); bone++)
@@ -229,85 +226,18 @@ public partial class LoaderSmokeTest : Node
     }
 
     /// <summary>
-    /// Raw numbers of a pack for checking placement against the game: its script, every MDS frame
-    /// (parent, file matrix, vertex bounds) and every bind-pose matrix.
-    /// </summary>
-    private static void DumpPack(VirtualFileSystem vfs, string path, System.Text.StringBuilder text, HashSet<string>? frameFilter = null)
-    {
-        static string F(float v) => v.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
-        static string M(System.Numerics.Matrix4x4 m) =>
-            $"[{F(m.M11)} {F(m.M12)} {F(m.M13)} {F(m.M14)} | {F(m.M21)} {F(m.M22)} {F(m.M23)} {F(m.M24)} | {F(m.M31)} {F(m.M32)} {F(m.M33)} {F(m.M34)} | {F(m.M41)} {F(m.M42)} {F(m.M43)} {F(m.M44)}]";
-
-        text.AppendLine($"== {path}");
-        var pack = vfs.TryOpenPack(VfsPath.Normalize(path));
-        if (pack == null)
-        {
-            text.AppendLine("  not a pack");
-            return;
-        }
-        foreach (var entry in pack.Entries)
-            text.AppendLine($"  entry {entry.Name} {entry.Size}");
-        if (pack.TryRead(CharacterInfo.FileName) is { } info)
-        {
-            foreach (var command in OpenCloud.Core.Scripts.GameScript.Parse(info, CharacterInfo.Tags))
-                text.AppendLine($"  cfg {command.Tag} {string.Join(", ", command.Args.Select(a => a.AsString ?? F(a.AsFloat)))}");
-        }
-        foreach (var entry in pack.Entries)
-        {
-            var data = pack.GetSpan(entry);
-            string extension = VfsPath.GetExtension(entry.Name);
-            if (extension == "mds" && MdsFile.LooksLikeMds(data))
-            {
-                foreach (var frame in MdsFile.Parse(data).Objects)
-                {
-                    text.Append($"  {entry.Name} #{frame.Index} '{frame.Name}' parent {frame.Parent} {M(frame.Matrix)}");
-                    if (frame.Model is { Positions.Length: > 0 } model)
-                    {
-                        var min = model.Positions.Aggregate(System.Numerics.Vector4.Min);
-                        var max = model.Positions.Aggregate(System.Numerics.Vector4.Max);
-                        var p0 = model.Positions[0];
-                        text.Append($" verts {model.Positions.Length} min ({F(min.X)} {F(min.Y)} {F(min.Z)}) max ({F(max.X)} {F(max.Y)} {F(max.Z)}) v0 ({F(p0.X)} {F(p0.Y)} {F(p0.Z)} {F(p0.W)})");
-                    }
-                    text.AppendLine();
-                }
-            }
-            else if (extension == "mot" && frameFilter != null)
-            {
-                // Frame names come from the pack's MDS of the same base name.
-                var names = pack.TryRead(VfsPath.ChangeExtension(entry.Name, "mds")) is { } mdsData && MdsFile.LooksLikeMds(mdsData)
-                    ? MdsFile.Parse(mdsData).Objects.Select(o => o.BaseName).ToArray()
-                    : Array.Empty<string>();
-                foreach (var list in MotionFile.Parse(data))
-                {
-                    string name = list.Frame >= 0 && list.Frame < names.Length ? names[list.Frame] : "?";
-                    if (!frameFilter.Contains(name))
-                        continue;
-                    var shown = list.Keys.Where((k, i) => i < 3 || k.Frame is >= 360 and <= 366).Select(k => $"{k.Frame}:({F(k.Value.X)} {F(k.Value.Y)} {F(k.Value.Z)} {F(k.Value.W)})");
-                    text.AppendLine($"  {entry.Name} frame #{list.Frame} '{name}' target {list.Target} type {list.Type} keys {list.Keys.Length}: {string.Join(" ", shown)}");
-                }
-            }
-            else if (extension == "bbp")
-            {
-                var pose = MotionFile.ParseBindPose(data);
-                for (int i = 0; i < pose.Length; i++)
-                    text.AppendLine($"  {entry.Name} #{i} {M(pose[i])}");
-            }
-        }
-    }
-
-    /// <summary>
     /// Loads a character, dresses it, hangs parts on bones (<c>path@bone</c>) as the viewer does and,
     /// once Godot has posed everything, prints where every mesh really is: its global basis and its
     /// world bounds. Quits when done.
     /// </summary>
-    private async void ShowAttachedParts(GameModelLoader loader, string modelPath, List<string> skins, List<string> attaches)
+    private async void ShowAttachedParts(ModelLoader loader, string modelPath, List<string> skins, List<string> attaches)
     {
         var node = loader.Load(modelPath);
         foreach (var skin in skins)
         {
-            var model = FindAll<Node3D>(node).FirstOrDefault(n => n.HasMeta(MdsModelLoader.DeformFramesMeta));
+            var model = FindAll<Node3D>(node).FirstOrDefault(n => n.HasMeta(ModelMeta.DeformFrames));
             if (model != null)
-                GD.Print($"  costume {skin}: {loader.Mds.ApplySkin(model, skin)} frames");
+                GD.Print($"  costume {skin}: {loader.ApplySkin(model, skin)} frames");
         }
         AddChild(node);
         foreach (var attach in attaches)
@@ -315,13 +245,13 @@ public partial class LoaderSmokeTest : Node
             var parts = attach.Split('@');
             string bone = parts.Length > 1 ? parts[1] : "hat";
             var skeleton = FindAll<Skeleton3D>(node).FirstOrDefault(s => s.IsVisibleInTree() && s.FindBone(bone) >= 0)
-                ?? FindAll<Skeleton3D>(node).FirstOrDefault(s => Enumerable.Range(0, s.GetBoneCount()).Any(i => MdsObject.StripAttributes(s.GetBoneName(i)) == bone));
+                ?? FindAll<Skeleton3D>(node).FirstOrDefault(s => Enumerable.Range(0, s.GetBoneCount()).Any(i => NodeNames.StripAttributes(s.GetBoneName(i)) == bone));
             if (skeleton == null)
             {
                 GD.PrintErr($"  no skeleton with bone {bone}");
                 continue;
             }
-            int index = Enumerable.Range(0, skeleton.GetBoneCount()).First(i => MdsObject.StripAttributes(skeleton.GetBoneName(i)) == bone);
+            int index = Enumerable.Range(0, skeleton.GetBoneCount()).First(i => NodeNames.StripAttributes(skeleton.GetBoneName(i)) == bone);
             var attachment = new BoneAttachment3D { Name = "ref_" + bone };
             skeleton.AddChild(attachment);
             attachment.BoneName = skeleton.GetBoneName(index);

@@ -43,7 +43,7 @@ public partial class TownScene : Node3D
     private readonly List<string> _errors = new();
     private readonly List<string> _notes = new();
     private VirtualFileSystem? _vfs;
-    private GameModelLoader? _models;
+    private ModelLoader? _models;
     private LoadedMap? _map;
     private string _status = string.Empty;
     private bool _showHelp = true;
@@ -93,7 +93,7 @@ public partial class TownScene : Node3D
 
         var paths = GameDataPaths.Resolve(DataPaths);
         _vfs = GameDataPaths.MountAll(paths, _errors);
-        _models = new GameModelLoader(_vfs);
+        _models = new ModelLoader(_vfs);
         if (_vfs.Sources.Count == 0)
         {
             _status = "No game data mounted. Run with -- --data=<path to the disc .iso, DATA.HD4 or an extracted folder>.";
@@ -183,7 +183,7 @@ public partial class TownScene : Node3D
 
         try
         {
-            var loader = new MapLoader(_vfs!, _models!.Mds);
+            var loader = new MapLoader(_vfs!, _models!);
             _map = loader.Load(path, Clock);
             _mapRoot.AddChild(_map.Root);
             // Debug geometry stays hidden while walking.

@@ -26,9 +26,9 @@ namespace OpenCloud.Assets.Models;
 /// </summary>
 public sealed partial class MdsModelLoader
 {
-    private readonly VirtualFileSystem _vfs;
+    private readonly RetailFileSystem _vfs;
 
-    public MdsModelLoader(VirtualFileSystem vfs)
+    public MdsModelLoader(RetailFileSystem vfs)
     {
         _vfs = vfs;
     }
@@ -165,7 +165,7 @@ public sealed partial class MdsModelLoader
     }
 
     /// <summary>Name of the skeleton node inside every scene this loader builds.</summary>
-    public const string SkeletonNodeName = "Skeleton";
+    public const string SkeletonNodeName = ModelMeta.SkeletonNodeName;
 
     /// <summary>Builds the node tree of one MDS scene.</summary>
     public Node3D BuildScene(MdsFile mds, string name, TextureLibrary textures, SkinningData? skinning = null)
@@ -232,10 +232,10 @@ public sealed partial class MdsModelLoader
     }
 
     /// <summary>Meta key on a model's node (mesh or bone attachment) holding the frame that owns it.</summary>
-    public const string FrameMeta = "opencloud_frame";
+    public const string FrameMeta = ModelMeta.Frame;
 
     /// <summary>Meta key on a built scene holding the bone name of each MDS object, by index.</summary>
-    public const string BoneNamesMeta = "opencloud_bone_names";
+    public const string BoneNamesMeta = ModelMeta.BoneNames;
 
     /// <summary>
     /// Bind poses of a skinned model. The game moves each vertex by
@@ -486,11 +486,5 @@ public sealed partial class MdsModelLoader
         return GameMaterialFactory.Create(colour, texture, vertexColours);
     }
 
-    public static string SafeNodeName(string name)
-    {
-        // Godot reserves these characters in node names.
-        foreach (char c in ".:@/\"%")
-            name = name.Replace(c, '_');
-        return name.Length == 0 ? "Node" : name;
-    }
+    public static string SafeNodeName(string name) => NodeNames.Safe(name);
 }

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using OpenCloud.Assets.Models;
-using OpenCloud.Assets.Textures;
+using OpenCloud.Core;
 using OpenCloud.Core.IO;
 
 namespace OpenCloud.Assets.Maps;
@@ -30,21 +30,20 @@ public partial class MapSky : Node3D
 
     public MapSkyInfo Info { get; private set; } = null!;
 
-    public static MapSky Build(PackArchive pack, MdsModelLoader models)
+    /// <summary>Loads a converted sky pack (<see cref="MapSkyDocument"/>).</summary>
+    public static MapSky Load(VirtualFileSystem vfs, ModelLoader models, string documentPath)
     {
-        var script = pack.TryRead("info.cfg") ?? throw new System.IO.InvalidDataException("sky pack has no info.cfg");
-        var sky = new MapSky { Name = "Sky", Info = MapSkyInfo.Parse(script) };
+        var json = vfs.TryRead(documentPath) ?? throw new System.IO.FileNotFoundException($"Sky '{documentPath}' not found.");
+        var document = MapSkyDocument.FromJson(JsonValues.Parse(json, documentPath), documentPath);
+        string directory = VfsPath.GetDirectory(documentPath);
+        var sky = new MapSky { Name = "Sky", Info = document.Info };
 
         for (int band = 0; band < MapSkyInfo.Bands; band++)
         {
-            var textures = new TextureLibrary();
-            if (sky.Info.Images[band] is { } image && pack.TryRead(image) is { } imageData)
-                MdsModelLoader.TryAddTextures(textures, image, imageData);
-
             var entry = new Band { Root = new Node3D { Name = $"Band{band}", Visible = false } };
             // The back sky is drawn first, then the sky.
-            AddSkyModel(entry, pack, models, textures, sky.Info.BackSkies[band], sky.Info.BackSkySpeeds[band], "Back");
-            AddSkyModel(entry, pack, models, textures, sky.Info.Skies[band], sky.Info.SkySpeeds[band], "Front");
+            AddSkyModel(entry, vfs, models, directory, document.BackSkyFiles[band], sky.Info.BackSkySpeeds[band], "Back");
+            AddSkyModel(entry, vfs, models, directory, document.SkyFiles[band], sky.Info.SkySpeeds[band], "Front");
             if (entry.Root.GetChildCount() == 0)
             {
                 entry.Root.Free();
@@ -58,7 +57,7 @@ public partial class MapSky : Node3D
                 var holder = entry.Root.GetNodeOrNull(animation.Back ? "Back" : "Front");
                 foreach (var copy in holder?.GetChildren() ?? new Godot.Collections.Array<Node>())
                 {
-                    if (copy.FindChild(MdsModelLoader.SafeNodeName(animation.Frame), true, false) is Node3D frame)
+                    if (copy.FindChild(NodeNames.Safe(animation.Frame), true, false) is Node3D frame)
                         entry.Frames.Add((frame, animation.Speed));
                 }
             }
@@ -68,20 +67,23 @@ public partial class MapSky : Node3D
         return sky;
     }
 
-    private static void AddSkyModel(Band band, PackArchive pack, MdsModelLoader models, TextureLibrary textures, string? name, float speed, string role)
+    private static void AddSkyModel(Band band, VirtualFileSystem vfs, ModelLoader models, string directory, string? file, float speed, string role)
     {
-        if (name == null || pack.TryRead(name) is not { } data || !MdsFile.LooksLikeMds(data))
+        if (file == null)
             return;
-        var mds = MdsFile.Parse(data);
-        var meshes = models.BuildObjectMeshes(mds, textures);
-        foreach (var mesh in meshes.Values)
+        string path = VfsPath.Combine(directory, file);
+        if (!vfs.Exists(path))
+            return;
+        var model = models.Load(path);
+        foreach (var mesh in ModelLoader.FindAll<MeshInstance3D>(model))
             MakeSkyMaterials(mesh);
 
         var holder = new Node3D { Name = role };
         band.Root.AddChild(holder);
         foreach (bool mirrored in new[] { false, true })
         {
-            var copy = MdsModelLoader.BuildFrameTree(mds, meshes, mirrored ? "Mirror" : "Model");
+            var copy = mirrored ? (Node3D)model.Duplicate() : model;
+            copy.Name = mirrored ? "Mirror" : "Model";
             copy.Scale = mirrored ? new Vector3(1, -1, 1) : Vector3.One;
             holder.AddChild(copy);
         }
@@ -89,11 +91,11 @@ public partial class MapSky : Node3D
     }
 
     /// <summary>The sky ignores the map's lights and fog.</summary>
-    private static void MakeSkyMaterials(ArrayMesh mesh)
+    private static void MakeSkyMaterials(MeshInstance3D instance)
     {
-        for (int surface = 0; surface < mesh.GetSurfaceCount(); surface++)
+        for (int surface = 0; surface < instance.Mesh?.GetSurfaceCount(); surface++)
         {
-            if (mesh.SurfaceGetMaterial(surface) is StandardMaterial3D material)
+            if (instance.Mesh!.SurfaceGetMaterial(surface) is StandardMaterial3D material)
             {
                 material.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
                 material.DisableFog = true;

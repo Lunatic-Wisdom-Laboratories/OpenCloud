@@ -13,7 +13,7 @@ namespace OpenCloud.Scenes;
 
 /// <summary>
 /// Debug map viewer, the engine's counterpart of the retail map viewer mode (<c>mapviewlp</c>,
-/// an empty stub in the shipped game). It mounts the user's data, lists every map script and
+/// an empty stub in the shipped game). It mounts the converted data, lists every map and
 /// shows the chosen map with its lighting, sky and time of day, with a free camera.
 ///
 /// Keys: PageDown/PageUp next/previous map (or click the list), F reframe, R reload, C collision,
@@ -24,7 +24,7 @@ public partial class MapViewer : Node3D
 {
     [Export] public string[] DataPaths { get; set; } = Array.Empty<string>();
 
-    /// <summary>Map to show first (name like <c>s01</c> or a <c>.map</c> path); empty shows the first map.</summary>
+    /// <summary>Map to show first (name like <c>s01</c> or a map path); empty shows the first map.</summary>
     [Export] public string InitialMap { get; set; } = string.Empty;
 
     private VirtualFileSystem? _vfs;
@@ -63,12 +63,12 @@ public partial class MapViewer : Node3D
 
         var paths = GameDataPaths.Resolve(DataPaths);
         _vfs = GameDataPaths.MountAll(paths, _errors);
-        _loader = new MapLoader(_vfs, new MdsModelLoader(_vfs));
+        _loader = new MapLoader(_vfs, new ModelLoader(_vfs));
 
         if (_vfs.Sources.Count == 0)
         {
             _status = "No game data mounted.\n" +
-                      "Run with:  -- --data=<path to the disc .iso, DATA.HD4 or an extracted folder>\n" +
+                      "Convert your disc once with opencloud-converter, then run with:  -- --data=<converted folder or its data.zip>\n" +
                       $"or set {GameDataPaths.EnvironmentVariable}, or add data/paths to {GameDataPaths.ConfigPath}.";
             UpdateHud();
             return;
@@ -78,11 +78,11 @@ public partial class MapViewer : Node3D
 
         _maps.AddRange(MapLoader.EnumerateMaps(_vfs));
         foreach (var map in _maps)
-            _mapList.AddItem(map["map/".Length..^".map".Length]);
+            _mapList.AddItem(map["map/".Length..^MapDocument.Extension.Length]);
         _mapList.Visible = _maps.Count > 0;
         if (_maps.Count == 0)
         {
-            _status = "The mounted data has no map/*.map scripts (map viewing needs the retail data: the .iso, DATA.HD4 or an extracted folder).";
+            _status = "The mounted data has no converted maps (map/**/*.map.json). Convert your disc with opencloud-converter.";
             UpdateHud();
             return;
         }
@@ -264,7 +264,7 @@ public partial class MapViewer : Node3D
             var lighting = _map.Lighting;
             text.AppendLine($"[{_current + 1}/{_maps.Count}] {_map.Path}  {_status}");
             text.AppendLine($"parts {_map.Layout.Parts.Count}, placed {report.Placements}, pieces {report.PlacedPieces}, meshes {report.MeshInstances}, characters {report.Characters}, collision tris {report.CollisionTriangles}, points {report.FuncPoints}");
-            text.AppendLine($"model lists {report.ModelLists} ({report.Models} models), textures {report.Textures}, sky {(_map.Sky != null ? "yes" : "no")}");
+            text.AppendLine($"model lists {report.ModelLists} ({report.Models} models), sky {(_map.Sky != null ? "yes" : "no")}");
             text.AppendLine($"clock {_clock:00.0}h -> map time {_map.NowTime:00.0}h ({MapInfo.TimeBand(_map.NowTime)}), time flag {(info.TimeEnable ? "on" : "off")}, lighting set {(lighting != null ? lighting.Index.ToString() : "-")}{(_mapLighting ? "" : " (off)")}");
             if (report.MissingModels.Count > 0)
                 text.AppendLine($"missing models ({report.MissingModels.Count}): {string.Join(", ", report.MissingModels.Take(8))}{(report.MissingModels.Count > 8 ? ", ..." : "")}");

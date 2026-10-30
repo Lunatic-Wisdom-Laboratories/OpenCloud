@@ -32,17 +32,14 @@ public partial class AssetViewer : Node3D
     /// <summary>
     /// Max's model, in the order tried: the field player model <c>SetupMainUnit</c> loads
     /// (<c>mainchr/c01_base2</c> to <c>c01_base5</c>, by weapon), then the edit-mode character
-    /// (<c>chara/c01_base</c>, Max in town with the fishing rod), each as retail PACK or glTF.
+    /// (<c>chara/c01_base</c>, Max in town with the fishing rod), as converted by the converter.
     /// Equipment such as the cap is authored for the field rig.
     /// </summary>
     private static readonly string[] MaxCandidates =
     {
-        "mainchr/c01_base2.chr",
-        "mainchr/c01_base2.gltf",
-        "mainchr/c01_base.chr",
-        "mainchr/c01_base.gltf",
-        "chara/c01_base.chr",
-        "chara/c01_base.gltf",
+        "mainchr/c01_base2.glb",
+        "mainchr/c01_base.glb",
+        "chara/c01_base.glb",
     };
 
     /// <summary>
@@ -52,15 +49,15 @@ public partial class AssetViewer : Node3D
     /// </summary>
     private static readonly string[][] MaxCostumeCandidates =
     {
-        new[] { "mainchr/c01fuku1.chr", "mainchr/c01fuku1.gltf" },
-        new[] { "mainchr/c01sh001.chr", "mainchr/c01sh002.chr" },
+        new[] { "mainchr/c01fuku1.glb" },
+        new[] { "mainchr/c01sh001.glb", "mainchr/c01sh002.glb" },
     };
 
     /// <summary>Headwear is its own character, hung on Max's "hat" frame (<c>SetRef</c>).</summary>
-    private static readonly string[] MaxHatCandidates = { "mainchr/c01ha001.chr" };
+    private static readonly string[] MaxHatCandidates = { "mainchr/c01ha001.glb" };
 
     private VirtualFileSystem? _vfs;
-    private GameModelLoader? _loader;
+    private ModelLoader? _loader;
     private readonly List<string> _models = new();
     private readonly List<string> _errors = new();
     private int _current = -1;
@@ -105,12 +102,12 @@ public partial class AssetViewer : Node3D
 
         var paths = GameDataPaths.Resolve(DataPaths);
         _vfs = GameDataPaths.MountAll(paths, _errors);
-        _loader = new GameModelLoader(_vfs);
+        _loader = new ModelLoader(_vfs);
 
         if (_vfs.Sources.Count == 0)
         {
             _status = "No game data mounted.\n" +
-                      "Run with:  -- --data=<path to data.zip, the disc .iso, DATA.HD4 or an extracted folder>\n" +
+                      "Convert your disc once with opencloud-converter, then run with:  -- --data=<converted folder or its data.zip>\n" +
                       $"or set {GameDataPaths.EnvironmentVariable}, or add data/paths to {GameDataPaths.ConfigPath}.";
             UpdateHud();
             return;
@@ -121,7 +118,7 @@ public partial class AssetViewer : Node3D
             GameDataPaths.Save(paths);
 
         _models.AddRange(_vfs.EnumerateFiles()
-            .Where(path => GameModelLoader.ModelExtensions.Contains(VfsPath.GetExtension(path)))
+            .Where(path => ModelLoader.ModelExtensions.Contains(VfsPath.GetExtension(path)))
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
 
         if (!string.IsNullOrEmpty(InitialModel))
@@ -222,11 +219,11 @@ public partial class AssetViewer : Node3D
             foreach (var skeleton in FindAll<Skeleton3D>(_modelRoot))
             {
                 if (InPart(skeleton) || skeleton.GetParent() is not Node3D model || !model.IsVisibleInTree() ||
-                    model.GetNodeOrNull<AnimationPlayer>(MdsModelLoader.AnimationPlayerName) != null ||
+                    model.GetNodeOrNull<AnimationPlayer>(ModelMeta.AnimationPlayerName) != null ||
                     _players.Any(p => p.GetParent() == model || p.GetParent()?.IsAncestorOf(skeleton) == true))
                     continue;
 
-                var shared = new AnimationPlayer { Name = MdsModelLoader.AnimationPlayerName };
+                var shared = new AnimationPlayer { Name = ModelMeta.AnimationPlayerName };
                 foreach (var library in source.GetAnimationLibraryList())
                     shared.AddAnimationLibrary(library, source.GetAnimationLibrary(library));
                 model.AddChild(shared);
@@ -237,7 +234,7 @@ public partial class AssetViewer : Node3D
                 .Where(a => a != "RESET")
                 .Select((name, order) => (name, order))
                 .OrderBy(a => a.name.Split('/')[0], StringComparer.Ordinal)
-                .ThenBy(a => source.GetAnimation(a.name) is { } clip && clip.HasMeta(MdsModelLoader.KeyIndexMeta) ? (int)clip.GetMeta(MdsModelLoader.KeyIndexMeta) : a.order)
+                .ThenBy(a => source.GetAnimation(a.name) is { } clip && clip.HasMeta(ModelMeta.KeyIndex) ? (int)clip.GetMeta(ModelMeta.KeyIndex) : a.order)
                 .Select(a => a.name));
         }
 
@@ -253,7 +250,7 @@ public partial class AssetViewer : Node3D
     private static string DisplayName(AnimationPlayer player, string name)
     {
         var animation = player.GetAnimation(name);
-        string frames = $"{Mathf.RoundToInt(animation.Length * MotionAnimationBuilder.FramesPerSecond)}f";
+        string frames = $"{Mathf.RoundToInt(animation.Length * ModelMeta.FramesPerSecond)}f";
         return animation.HasMeta("step") ? $"{name}  ({frames}, step {(float)animation.GetMeta("step"):0.###})" : $"{name}  ({frames})";
     }
 
@@ -331,7 +328,7 @@ public partial class AssetViewer : Node3D
             if (player.CurrentAnimation is not { Length: > 0 })
                 continue;
             double length = player.CurrentAnimationLength;
-            double time = player.CurrentAnimationPosition + frames / MotionAnimationBuilder.FramesPerSecond;
+            double time = player.CurrentAnimationPosition + frames / ModelMeta.FramesPerSecond;
             player.Seek(length > 0 ? Mathf.PosMod(time, length) : 0, true);
         }
         UpdateHud();
@@ -402,18 +399,11 @@ public partial class AssetViewer : Node3D
 
             var report = new StringBuilder();
             report.Append($"{path}  ({elapsed} ms)");
-            if (VfsPath.GetExtension(path) is not ("gltf" or "glb"))
+            if (_loader.LastDocument is { } document)
             {
-                var r = _loader.Mds.LastReport;
-                report.Append($"\n  frames {r.Objects}, meshes {r.Meshes} ({r.SkinnedMeshes} skinned), triangles {r.Triangles}, animations {r.Animations}");
-                if (r.Character != null)
-                    report.Append($"\n  info.cfg: {r.Character.Name}, model {r.Character.Model}, {r.Character.Motions.Count} motion slots, skinned frames: {string.Join(" ", r.Character.SkinnedFrames)}");
-                foreach (var note in r.Notes)
-                    report.Append($"\n  {note}");
-                if (r.SkippedPrimitives > 0)
-                    report.Append($", skipped point/line primitives {r.SkippedPrimitives}");
-                if (r.MissingTextures.Count > 0)
-                    report.Append($"\n  missing textures: {string.Join(", ", r.MissingTextures.Take(8))}{(r.MissingTextures.Count > 8 ? "..." : string.Empty)}");
+                report.Append($"\n  {document.Kind} from {document.Source}");
+                foreach (var part in document.Models)
+                    report.Append($"\n  {part.Node}: {part.Frames.Length} frames, {part.Animations.Count} actions{(part.DeformFrames.Length > 0 ? ", skinned frames: " + string.Join(" ", part.DeformFrames) : string.Empty)}");
             }
             _status = _status.Length == 0 ? report.ToString() : _status + "\n" + report;
             ApplyBoneMarkers();
@@ -433,14 +423,14 @@ public partial class AssetViewer : Node3D
     /// </summary>
     private bool Dress(string costume)
     {
-        if (_loader == null || VfsPath.GetExtension(costume) is "gltf" or "glb")
+        if (_loader == null)
             return false;
-        var model = FindAll<Node3D>(_modelRoot).FirstOrDefault(n => n.HasMeta(MdsModelLoader.DeformFramesMeta));
+        var model = FindAll<Node3D>(_modelRoot).FirstOrDefault(n => n.HasMeta(ModelMeta.DeformFrames));
         if (model == null)
             return false;
         try
         {
-            int frames = _loader.Mds.ApplySkin(model, costume);
+            int frames = _loader.ApplySkin(model, costume);
             _status += $"\n{costume}: costume on {frames} frames";
             return frames > 0;
         }
@@ -456,13 +446,13 @@ public partial class AssetViewer : Node3D
     {
         // Frame names may carry attributes after "--".
         int BoneIndex(Skeleton3D s) => Enumerable.Range(0, s.GetBoneCount())
-            .FirstOrDefault(i => MdsObject.StripAttributes(s.GetBoneName(i)) == bone, -1);
+            .FirstOrDefault(i => NodeNames.StripAttributes(s.GetBoneName(i)) == bone, -1);
         var skeleton = FindAll<Skeleton3D>(_modelRoot).FirstOrDefault(s => s.IsVisibleInTree() && BoneIndex(s) >= 0);
         if (_loader == null || skeleton == null)
             return;
         try
         {
-            var attachment = new BoneAttachment3D { Name = MdsModelLoader.SafeNodeName("ref_" + bone) }.WithMeta(PartMeta, true);
+            var attachment = new BoneAttachment3D { Name = NodeNames.Safe("ref_" + bone) }.WithMeta(PartMeta, true);
             _watchedBone = (skeleton, BoneIndex(skeleton), bone);
             skeleton.AddChild(attachment);
             attachment.BoneName = skeleton.GetBoneName(BoneIndex(skeleton));
@@ -475,16 +465,13 @@ public partial class AssetViewer : Node3D
                 ? ps.GetBoneRest(0).Basis.Orthonormalized()
                 : Basis.Identity;
             _status += $"\n{path}: on {bone}";
-            if (_loader.Mds.LastReport.Character is { } partInfo)
-                _status += $"\n  part info.cfg: {partInfo.Motions.Count} motion slots, position {partInfo.Position?.ToString() ?? "-"}, rotation {partInfo.Rotation?.ToString() ?? "-"}" +
-                           $"\n  part commands: {string.Join(" ", partInfo.Commands.Select(c => c.Tag + (c.Args.Count > 0 ? "(" + string.Join(",", c.Args.Select(a => a.AsString ?? a.AsFloat.ToString("0.###"))) + ")" : string.Empty)))}";
             _status += PlayPartMotion(part);
 
             // Diagnostics for placement: the bone's rest and bind (bbp) matrices, and the part's root rest.
             int index = BoneIndex(skeleton);
             var rest = skeleton.GetBoneGlobalRest(index);
             _status += $"\n  {bone} rest {Describe(rest)}";
-            if (skeleton.GetParent()?.GetMeta(MdsModelLoader.BaseMatricesMeta, default(Variant)).Obj is Godot.Collections.Array bases && index < bases.Count)
+            if (skeleton.GetParent()?.GetMeta(ModelMeta.BaseMatrices, default(Variant)).Obj is Godot.Collections.Array bases && index < bases.Count)
                 _status += $"\n  {bone} bbp  {Describe(bases[index].AsTransform3D())}";
             // The chain from Max's root to the bone, then every frame of the part with its local rest.
             var chain = new List<int>();
@@ -521,7 +508,7 @@ public partial class AssetViewer : Node3D
                 .SelectMany(l => player.GetAnimationLibrary(l).GetAnimationList()
                     .Select(a => (Name: l.ToString().Length == 0 ? a.ToString() : $"{l}/{a}", Clip: player.GetAnimationLibrary(l).GetAnimation(a))))
                 .OrderBy(a => a.Name.Split('/')[0], StringComparer.Ordinal)
-                .ThenBy(a => a.Clip.HasMeta(MdsModelLoader.KeyIndexMeta) ? (int)a.Clip.GetMeta(MdsModelLoader.KeyIndexMeta) : 0)
+                .ThenBy(a => a.Clip.HasMeta(ModelMeta.KeyIndex) ? (int)a.Clip.GetMeta(ModelMeta.KeyIndex) : 0)
                 .Select(a => a.Name)
                 .FirstOrDefault();
             if (first == null)
@@ -653,7 +640,7 @@ public partial class AssetViewer : Node3D
         if (_animation >= 0 && _players.Count > 0)
         {
             var player = _players[0];
-            int frame = Mathf.RoundToInt(player.CurrentAnimationPosition * MotionAnimationBuilder.FramesPerSecond);
+            int frame = Mathf.RoundToInt(player.CurrentAnimationPosition * ModelMeta.FramesPerSecond);
             text.AppendLine($"Animation {_animation + 1}/{_animations.Count}: {_animations[_animation]}  frame {frame}" +
                             $"  speed x{_speed:0.###}{(_useKeyStep ? " * KEY step" : string.Empty)}{(_paused ? "  [paused]" : string.Empty)}");
         }

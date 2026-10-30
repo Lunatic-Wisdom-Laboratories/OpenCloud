@@ -26,7 +26,8 @@ public sealed class MotionSet
 }
 
 /// <summary>
-/// The parts of a character pack's <c>info.cfg</c> (character <c>ScanInfoFile</c>) that build its model and animation: the model, the frames whose
+/// The parts of a character pack's <c>info.cfg</c> (character <c>ScanInfoFile</c>)
+/// that build its model and animation: the model, the frames whose
 /// visuals are skinned, and the motion slots with their <c>KEY</c> intervals. Other commands
 /// (effects, sounds, cloth, outlines...) are kept in <see cref="Commands"/> for later stages.
 /// </summary>
