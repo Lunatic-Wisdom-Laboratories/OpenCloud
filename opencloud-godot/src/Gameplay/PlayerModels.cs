@@ -94,10 +94,10 @@ public static class PlayerModels
                 skeleton.AddChild(attachment);
                 attachment.BoneName = skeleton.GetBoneName(bone);
                 var part = loader.Load(path);
-                // The part follows the frame; its own clips would fight the rig's.
-                foreach (var player in FindAll<AnimationPlayer>(part))
-                    player.QueueFree();
                 attachment.AddChild(part);
+                // The part plays its own first motion, as the game steps a SetRef part: the
+                // hat's motion is what turns it the right way up on the frame.
+                PlayFirstMotion(part);
                 notes.Add($"  {path}: on {frame}");
             }
             catch (Exception exception) when (exception is System.IO.InvalidDataException or ArgumentException)
@@ -105,6 +105,24 @@ public static class PlayerModels
                 notes.Add($"  {path}: {exception.Message}");
             }
             return;
+        }
+    }
+
+    private static void PlayFirstMotion(Node part)
+    {
+        foreach (var player in FindAll<AnimationPlayer>(part))
+        {
+            var first = player.GetAnimationLibraryList()
+                .OrderBy(l => int.TryParse(l.ToString().TrimStart('m'), out int slot) ? slot : int.MaxValue)
+                .SelectMany(l => player.GetAnimationLibrary(l).GetAnimationList()
+                    .Select(a => (Name: l.ToString().Length == 0 ? a.ToString() : $"{l}/{a}", Clip: player.GetAnimationLibrary(l).GetAnimation(a))))
+                .OrderBy(a => a.Clip.HasMeta(ModelMeta.KeyIndex) ? (int)a.Clip.GetMeta(ModelMeta.KeyIndex) : int.MaxValue)
+                .Select(a => a.Name)
+                .FirstOrDefault();
+            if (first == null)
+                continue;
+            player.Play(first);
+            player.Seek(0, true);
         }
     }
 

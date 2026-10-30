@@ -153,6 +153,7 @@ public partial class PlayerCharacter : CharacterBody3D
         AddChild(model);
         _motion = new CharacterMotion(FindAnimationPlayer(model));
         _motion.SetMotion(Motions.Stand, MotionFlags.Restart);
+        _motion.Tick();
         model.GlobalTransform = GlobalTransform;
     }
 
@@ -218,6 +219,7 @@ public partial class PlayerCharacter : CharacterBody3D
             _motion.SetMotion(motion);
         if (!Mathf.IsEqualApprox(step, _motion.Step))
             _motion.SetStep(step);
+        _motion.Tick();
     }
 
     /// <summary>One game frame of <c>CharaControl</c>.</summary>
