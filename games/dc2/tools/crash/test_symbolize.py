@@ -50,8 +50,8 @@ class ParseReportTest(unittest.TestCase):
 
     def test_finds_frames_and_ignores_register_lines(self) -> None:
         text = (
-            "#00 darkchronicle.exe+0x1a2b\n"
-            "  7  C:\\Games\\dc2\\darkchronicle.exe+0x10 (raw)\n"
+            "#00 opencloud.exe+0x1a2b\n"
+            "  7  C:\\Games\\dc2\\opencloud.exe+0x10 (raw)\n"
             "#1 libc.so.6+0x29d90\n"
             "register rip=0x1234\n"
         )
@@ -59,8 +59,8 @@ class ParseReportTest(unittest.TestCase):
         self.assertEqual(
             frames,
             [
-                symbolize.Frame(0, "darkchronicle.exe", 0x1A2B),
-                symbolize.Frame(1, "C:\\Games\\dc2\\darkchronicle.exe", 0x10),
+                symbolize.Frame(0, "opencloud.exe", 0x1A2B),
+                symbolize.Frame(1, "C:\\Games\\dc2\\opencloud.exe", 0x10),
                 symbolize.Frame(2, "libc.so.6", 0x29D90),
             ],
         )
@@ -95,7 +95,7 @@ class ImageBaseParserTest(unittest.TestCase):
     """Load base parsing from llvm-readobj output."""
 
     def test_coff_image_base(self) -> None:
-        text = "File: darkchronicle.exe\nFormat: COFF-x86-64\nImageBase: 0x140000000\n"
+        text = "File: opencloud.exe\nFormat: COFF-x86-64\nImageBase: 0x140000000\n"
         self.assertEqual(symbolize.parse_coff_image_base(text), 0x140000000)
 
     def test_macho_text_vmaddr_skips_pagezero(self) -> None:
@@ -139,15 +139,15 @@ class MachOSourcesTest(unittest.TestCase):
 
     def test_dsym_bundle_resolves_to_its_dwarf_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            bundle = Path(directory) / "darkchronicle.dSYM"
-            dwarf = bundle / "Contents" / "Resources" / "DWARF" / "darkchronicle"
+            bundle = Path(directory) / "opencloud.dSYM"
+            dwarf = bundle / "Contents" / "Resources" / "DWARF" / "opencloud"
             dwarf.parent.mkdir(parents=True)
             dwarf.write_bytes(b"")
             self.assertEqual(symbolize.dsym_dwarf_file(bundle), dwarf)
             self.assertEqual(symbolize.dsym_dwarf_file(dwarf), dwarf)
 
     def test_parses_atos_lines(self) -> None:
-        text = "CrashTestSegv() (in darkchronicle) (crash_test_modes.cpp:42)\n0x100003f00 (in darkchronicle)\n"
+        text = "CrashTestSegv() (in opencloud) (crash_test_modes.cpp:42)\n0x100003f00 (in opencloud)\n"
         self.assertEqual(
             symbolize.parse_atos_output(text),
             [[("CrashTestSegv()", "crash_test_modes.cpp:42")], [("??", "??:0:0")]],

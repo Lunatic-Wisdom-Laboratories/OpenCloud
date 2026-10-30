@@ -60,12 +60,12 @@ lines on its console in every build type. A directly launched executable keeps t
 
 - **stderr** (`log.console`, on by default): the message alone, one line per call, no timestamp. Lines at or above
   the category's level.
-- **The session file**: `<save root>/../logs/darkchronicle-<session>.log`, opened by `LogAttachFile` once
+- **The session file**: `<save root>/../logs/opencloud-<session>.log`, opened by `LogAttachFile` once
   `config.json` is read. Lines logged since `LogInit` are held in memory (up to 1 MiB) and written first, so the
   file begins with the session header. Each line reads
 
   ```
-  2026-10-18 14:22:33.123 INFO  [12345] data     dataread: indexed 5021 files under ~/chronicletwo/data
+  2026-10-18 14:22:33.123 INFO  [12345] data     dataread: indexed 5021 files under ~/opencloud/dc2/data
   ```
 
   with local time, level, thread (its name where Quill reads one, which MinGW builds do not; else the OS thread id,
@@ -73,7 +73,7 @@ lines on its console in every build type. A directly launched executable keeps t
   `log.file` false or `DC2_LOG_FILE=0` turns it off. There is no rotation within a session, so a crash has one
   contiguous file; past 256 MiB the file says so once and then takes only warnings and worse.
 - **Retention**: when the file opens, `logs/` keeps the newest `log.keep` session logs (default 10, this one
-  included); older `darkchronicle-*.log` files are deleted. Other files are left alone.
+  included); older `opencloud-*.log` files are deleted. Other files are left alone.
 
 The session id is `yyyymmdd-hhmmss-xxxx` (local start time and four random hex digits). It names the log, heads it,
 and names the crash bundle, so a log and a crash report pair up.

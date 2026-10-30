@@ -23,11 +23,11 @@ namespace fs = std::filesystem;
 namespace {
 
 fs::path UseTempSaveRoot() {
-    PathsConfigure({.app_dir = "opencloud-test", .env_data = "KZTEST_DATA", .env_save = "KZTEST_SAVE"});
+    PathsConfigure({.app_dir = "opencloud-test", .env_data = "OCTEST_DATA", .env_save = "OCTEST_SAVE"});
     fs::path root = fs::temp_directory_path() / ("dc_mc_test_" + std::to_string(dc::test::ProcessId()));
     fs::remove_all(root);
     fs::create_directories(root);
-    dc::test::SetEnv("KZTEST_SAVE", root, 1);
+    dc::test::SetEnv("OCTEST_SAVE", root, 1);
     return root;
 }
 

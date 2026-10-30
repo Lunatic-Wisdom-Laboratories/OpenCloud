@@ -9,7 +9,7 @@ function(matrix_scene name input frame)
     string(TOLOWER "${name}" label)
     add_test(NAME Matrix.${name}
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/port/matrix.py"
-            --exe $<TARGET_FILE:darkchronicle> --input "${CMAKE_SOURCE_DIR}/${input}" --frame ${frame}
+            --exe $<TARGET_FILE:opencloud> --input "${CMAKE_SOURCE_DIR}/${input}" --frame ${frame}
             --scene ${label} --work "${CMAKE_BINARY_DIR}/matrix/${label}"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     set_tests_properties(Matrix.${name} PROPERTIES

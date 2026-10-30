@@ -165,7 +165,7 @@ class PS2OnlyTests(unittest.TestCase):
     def test_reader_functions_must_be_replaced_or_unlinked(self):
         with tempfile.TemporaryDirectory() as root:
             write(root, "build/port_overrides.txt", "SearchFile(char*,int)\nCDRead(int)\n")
-            write(root, "build/darkchronicle", "")
+            write(root, "build/opencloud", "")
             linked = {"InitCDFile", "SearchFile", "CDRead", "LoadFile2.isra.0"}
             with mock.patch.object(truncations, "linked_functions", return_value=linked):
                 failures = records.check_ps2_only_functions(os.path.join(root, "build"))

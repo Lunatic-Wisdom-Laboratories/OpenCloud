@@ -8,7 +8,7 @@ $archive = Resolve-CheckoutPath $Destination
 & "$PSScriptRoot/check-runtime.ps1" -BuildDirectory $build
 $manifest = Join-Path $build 'windows-runtime-files.txt'
 $names = @(Get-Content -LiteralPath $manifest | Where-Object { $_.Trim() })
-if ('darkchronicle.exe' -notin $names -or 'dc2data.exe' -notin $names -or 'vulkan-1.dll' -notin $names) {
+if ('opencloud.exe' -notin $names -or 'dc2data.exe' -notin $names -or 'vulkan-1.dll' -notin $names) {
     throw 'The runtime manifest is incomplete. Reconfigure and build first.'
 }
 $paths = foreach ($name in $names) {

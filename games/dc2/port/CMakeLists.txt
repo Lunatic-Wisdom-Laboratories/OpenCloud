@@ -34,13 +34,13 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/generated/include/opencloud)
 configure_file(${OC_ROOT}/include/opencloud/data_version.hpp.in
     ${CMAKE_BINARY_DIR}/generated/include/opencloud/data_version.hpp @ONLY)
 
-# port/assets/icon/chronicletwo-128.rgba, the two moons' raw 128x128 RGBA pixels: the window icon until the game data
+# port/assets/icon/opencloud-128.rgba, the OpenCloud logo's raw 128x128 RGBA pixels: the window icon until the game data
 # is there to draw Max's wrench from (main.cpp).
-set(ICON_RGBA ${CMAKE_SOURCE_DIR}/port/assets/icon/chronicletwo-128.rgba)
+set(ICON_RGBA ${CMAKE_SOURCE_DIR}/port/assets/icon/opencloud-128.rgba)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ICON_RGBA})
 file(READ ${ICON_RGBA} icon_hex HEX)
 string(REGEX REPLACE "(..)" "0x\\1," icon_bytes "${icon_hex}")
-file(CONFIGURE OUTPUT ${CMAKE_BINARY_DIR}/generated/include/icon/chronicletwo.hpp
+file(CONFIGURE OUTPUT ${CMAKE_BINARY_DIR}/generated/include/icon/opencloud.hpp
     CONTENT "#pragma once\n#include <cstdint>\ninline constexpr int kIconSize = 128;\ninline constexpr std::uint8_t kIconRgba[] = {${icon_bytes}};\n")
 
 # The engine sits outside this game's tree, so it is told where the game's gameplay data lives.
@@ -330,16 +330,16 @@ function(ct_link_game target)
     endif()
 endfunction()
 
-add_executable(darkchronicle ${PORT_DIR}/main.cpp)
-set_target_properties(darkchronicle PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-ct_link_game(darkchronicle)
+add_executable(opencloud ${PORT_DIR}/main.cpp)
+set_target_properties(opencloud PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+ct_link_game(opencloud)
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-    # iOS runs only applications: the executable goes inside darkchronicle.app with a generated Info.plist.
-    set_target_properties(darkchronicle PROPERTIES
+    # iOS runs only applications: the executable goes inside opencloud.app with a generated Info.plist.
+    set_target_properties(opencloud PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/assets/ios/Info.plist.in
-        MACOSX_BUNDLE_GUI_IDENTIFIER org.chronicletwo.darkchronicle
-        MACOSX_BUNDLE_BUNDLE_NAME "Dark Chronicle"
+        MACOSX_BUNDLE_GUI_IDENTIFIER org.lunalabs.opencloud
+        MACOSX_BUNDLE_BUNDLE_NAME "OpenCloud"
         MACOSX_BUNDLE_SHORT_VERSION_STRING 0.1
         MACOSX_BUNDLE_BUNDLE_VERSION 1)
     # The launcher, the on-screen gamepad and the DualSense haptics are Swift (port/src/ios), which calls the game
@@ -356,28 +356,28 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
         ${PORT_DIR}/ios/Haptics.swift)
     target_compile_options(ct_ios_swift PRIVATE -cxx-interoperability-mode=default "SHELL:-Xcc -std=c++20"
         "SHELL:-I ${PORT_DIR}/ios")
-    target_link_libraries(darkchronicle PRIVATE ct_ios_swift)
+    target_link_libraries(opencloud PRIVATE ct_ios_swift)
     # clang++ links, so the C++ flags apply; the Swift runtime is in iOS, its back-deployment and C++ interop
     # libraries in the toolchain.
-    set_target_properties(darkchronicle PROPERTIES LINKER_LANGUAGE CXX)
+    set_target_properties(opencloud PROPERTIES LINKER_LANGUAGE CXX)
     get_filename_component(CT_SWIFT_LIBRARIES "${CMAKE_Swift_COMPILER}/../../lib/swift/iphoneos" ABSOLUTE)
-    target_link_directories(darkchronicle PRIVATE ${CT_IOS_SDK}/usr/lib/swift ${CT_SWIFT_LIBRARIES})
+    target_link_directories(opencloud PRIVATE ${CT_IOS_SDK}/usr/lib/swift ${CT_SWIFT_LIBRARIES})
     # iOS 16's libc++ lacks std::to_chars for floating point, which std::format calls; the executable defines it.
     add_library(ct_ios_to_chars OBJECT ${PORT_DIR}/ios/to_chars.cpp)
     set_target_properties(ct_ios_to_chars PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
-    target_link_libraries(darkchronicle PRIVATE ct_ios_to_chars)
+    target_link_libraries(opencloud PRIVATE ct_ios_to_chars)
 endif()
 if(WIN32)
-    target_link_options(darkchronicle PRIVATE -municode)
+    target_link_options(opencloud PRIVATE -municode)
     enable_language(RC)
-    target_sources(darkchronicle PRIVATE ${CMAKE_SOURCE_DIR}/port/assets/icon/chronicletwo.rc)
+    target_sources(opencloud PRIVATE ${CMAKE_SOURCE_DIR}/port/assets/icon/opencloud.rc)
 endif()
 
 include(GNUInstallDirs)
-install(TARGETS darkchronicle RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} BUNDLE DESTINATION .)
+install(TARGETS opencloud RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} BUNDLE DESTINATION .)
 if(CT_ENABLE_TRACY)
     install(FILES ${CMAKE_BINARY_DIR}/Tracy-LICENSE.txt
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/chronicletwo)
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/opencloud)
 endif()
 
 # The button symbols (docs/GLYPHS.md): port/assets/glyphs, copied to glyphs/ beside the executable, the art of
@@ -396,10 +396,10 @@ foreach(glyph IN LISTS CT_GLYPH_SOURCES)
     list(APPEND CT_GLYPH_COPIES ${glyph_copy})
 endforeach()
 add_custom_target(ct_glyphs DEPENDS ${CT_GLYPH_COPIES})
-add_dependencies(darkchronicle ct_glyphs)
+add_dependencies(opencloud ct_glyphs)
 install(DIRECTORY assets/glyphs/ DESTINATION ${CMAKE_INSTALL_BINDIR}/glyphs)
 
-option(CT_BUILD_TESTS "Build darkchronicle_tests" ON)
+option(CT_BUILD_TESTS "Build opencloud_tests" ON)
 if(CT_BUILD_TESTS)
     add_subdirectory(src/tests)
 endif()
@@ -411,10 +411,10 @@ endforeach()
 
 if(WIN32)
     include(${OC_ROOT}/cmake/OpenCloudWindowsRuntime.cmake)
-    oc_windows_runtime(darkchronicle INSTALL EXECUTABLES dc2data)
+    oc_windows_runtime(opencloud INSTALL EXECUTABLES dc2data)
     oc_windows_runtime(dc2data)
     oc_windows_runtime(dc2data_bridge_test)
-    if(TARGET darkchronicle_tests)
-        oc_windows_runtime(darkchronicle_tests)
+    if(TARGET opencloud_tests)
+        oc_windows_runtime(opencloud_tests)
     endif()
 endif()

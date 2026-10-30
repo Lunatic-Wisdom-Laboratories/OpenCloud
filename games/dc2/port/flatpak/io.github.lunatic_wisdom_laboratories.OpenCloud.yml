@@ -1,12 +1,12 @@
 # The PC port (docs/PC.md) as a Flatpak. docs/FLATPAK.md has the commands to build, install and run
 # it and to put the game's data where it looks.
-id: org.themoonpeople.ChronicleTwo
+id: io.github.lunatic_wisdom_laboratories.OpenCloud
 runtime: org.freedesktop.Platform
 runtime-version: '26.08'
 sdk: org.freedesktop.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.llvm22
-command: darkchronicle
+command: opencloud
 finish-args:
   - --socket=wayland
   - --socket=fallback-x11
@@ -22,7 +22,7 @@ finish-args:
   - --share=network
 
 modules:
-  # Header only, for the build alone: the network is off while chronicletwo configures.
+  # Header only, for the build alone: the network is off while opencloud configures.
   - name: nlohmann-json
     buildsystem: cmake-ninja
     config-opts:
@@ -116,7 +116,7 @@ modules:
     sources:
       - cargo-sources.json
 
-  - name: chronicletwo
+  - name: opencloud
     buildsystem: cmake-ninja
     builddir: true
     build-options:
@@ -126,9 +126,9 @@ modules:
         CC: clang
         CXX: clang++
         LD: ld.lld
-        CARGO_HOME: /run/build/chronicletwo/cargo
+        CARGO_HOME: /run/build/opencloud/cargo
         CARGO_NET_OFFLINE: 'true'
-        OC_CORROSION_SOURCE_DIR: /run/build/chronicletwo/corrosion
+        OC_CORROSION_SOURCE_DIR: /run/build/opencloud/corrosion
       # The SDK's default flags turn on _GLIBCXX_ASSERTIONS, -Werror=format-security and -g, none of
       # which the game's code is built with anywhere else; Release supplies the optimisation.
       cflags: ''
@@ -136,7 +136,7 @@ modules:
       cxxflags: ''
       cxxflags-override: true
       # flatpak-builder would otherwise move every debug section, line tables included, into the .Debug
-      # extension. The crash handler reads darkchronicle's own line tables (docs/SYMBOLS.md).
+      # extension. The crash handler reads opencloud's own line tables (docs/SYMBOLS.md).
       no-debuginfo: true
     config-opts:
       - -DCMAKE_BUILD_TYPE=Release
@@ -145,20 +145,20 @@ modules:
       - -DCMAKE_CXX_COMPILER=/usr/lib/sdk/llvm22/bin/clang++
       - -DCT_BUILD_TESTS=OFF
       - -DOC_FFMPEG_DIR=/app
-      - -DOC_PORT_VENDOR_DIRS=/run/build/chronicletwo/vendor
-      - -DFETCHCONTENT_SOURCE_DIR_FASTGLTF=/run/build/chronicletwo/fastgltf
-      - -DFETCHCONTENT_SOURCE_DIR_SIMDJSON=/run/build/chronicletwo/simdjson
-      - -DFETCHCONTENT_SOURCE_DIR_CPPTRACE=/run/build/chronicletwo/cpptrace
-      - -DFETCHCONTENT_SOURCE_DIR_TRACY=/run/build/chronicletwo/tracy
-      - -DFETCHCONTENT_SOURCE_DIR_LIBDWARF=/run/build/chronicletwo/libdwarf
-      - -DFETCHCONTENT_SOURCE_DIR_LUAU=/run/build/chronicletwo/luau
+      - -DOC_PORT_VENDOR_DIRS=/run/build/opencloud/vendor
+      - -DFETCHCONTENT_SOURCE_DIR_FASTGLTF=/run/build/opencloud/fastgltf
+      - -DFETCHCONTENT_SOURCE_DIR_SIMDJSON=/run/build/opencloud/simdjson
+      - -DFETCHCONTENT_SOURCE_DIR_CPPTRACE=/run/build/opencloud/cpptrace
+      - -DFETCHCONTENT_SOURCE_DIR_TRACY=/run/build/opencloud/tracy
+      - -DFETCHCONTENT_SOURCE_DIR_LIBDWARF=/run/build/opencloud/libdwarf
+      - -DFETCHCONTENT_SOURCE_DIR_LUAU=/run/build/opencloud/luau
     # post-install runs in the build directory, not the source.
     post-install:
       - install -Dm644 -t ${FLATPAK_DEST}/share/applications ${FLATPAK_BUILDER_BUILDDIR}/port/flatpak/${FLATPAK_ID}.desktop
       - install -Dm644 -t ${FLATPAK_DEST}/share/metainfo ${FLATPAK_BUILDER_BUILDDIR}/port/flatpak/${FLATPAK_ID}.metainfo.xml
-      - install -Dm644 ${FLATPAK_BUILDER_BUILDDIR}/port/assets/icon/chronicletwo-512.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/${FLATPAK_ID}.png
+      - install -Dm644 ${FLATPAK_BUILDER_BUILDDIR}/port/assets/icon/opencloud-512.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/${FLATPAK_ID}.png
     sources:
-      # chronicletwo-source: the CI job swaps this for a git source at the commit under test.
+      # opencloud-source: the CI job swaps this for a git source at the commit under test.
       - type: dir
         path: ../..
         skip:
@@ -175,8 +175,8 @@ modules:
           - save
           - ps2/asm
           - .private
-          - chronicletwo.flatpak
-      # chronicletwo-source-end
+          - opencloud.flatpak
+      # opencloud-source-end
       # flatpak-builder downloads these before entering its network-restricted build sandbox.
       - cargo-sources.json
       - type: archive

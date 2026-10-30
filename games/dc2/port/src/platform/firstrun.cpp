@@ -86,14 +86,14 @@ void FirstRunRequireData(const fs::path &root, bool headless) {
     if (!headless) {
         try {
             const auto path = root.u8string();
-            if (opencloud::setup_data("Dark Chronicle — Game data", std::string(
+            if (opencloud::setup_data("OpenCloud — Dark Chronicle game data", std::string(
                                                                       reinterpret_cast<const char *>(path.data()), path.size())) &&
                 !FirstRunDataMissing(root)) {
                 return;
             }
         } catch (const std::exception &error) {
             CT_LOG_ERROR(Main, "Game data setup: {}", error.what());
-            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Dark Chronicle", error.what(), nullptr);
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "OpenCloud", error.what(), nullptr);
         }
     }
     LogFlush();

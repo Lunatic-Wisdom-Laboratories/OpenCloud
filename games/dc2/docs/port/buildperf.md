@@ -38,9 +38,9 @@ The launcher streams native stdout and stderr to the console and `build.log`, an
 
 ## Debug information size and link time
 
-Measured on 2026-10-18 with llvm-mingw 20260922 (clang 23.1.2), Ninja 1.13.2 and 32 jobs, building `darkchronicle` in Release at `abe0d5d9`, before the crash handler and logger existed. Each link time is ninja's record for relinking after deleting the exe, with no compile. Other builds were running on the host, so link times are diagnostic.
+Measured on 2026-10-18 with llvm-mingw 20260922 (clang 23.1.2), Ninja 1.13.2 and 32 jobs, building `opencloud` in Release at `abe0d5d9`, before the crash handler and logger existed. Each link time is ninja's record for relinking after deleting the exe, with no compile. Other builds were running on the host, so link times are diagnostic.
 
-| Configuration | `darkchronicle.exe` | PDB | Link (s) |
+| Configuration | `opencloud.exe` | PDB | Link (s) |
 | --- | ---: | ---: | --- |
 | Release, no `-g` (before) | 27,837,440 B | - | 0.57, 0.58, 0.77 |
 | Release, `CT_SYMBOLS=embedded` (`-gline-tables-only`) | 61,396,992 B | - | 0.72, 0.72, 0.74, 0.75, 1.11 |

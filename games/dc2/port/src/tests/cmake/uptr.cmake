@@ -1,7 +1,7 @@
 if(NOT WIN32)
     find_package(Python3 COMPONENTS Interpreter)
 
-    # No build dependency on darkchronicle: ctest runs after the build and reads the binary from CMAKE_BINARY_DIR.
+    # No build dependency on opencloud: ctest runs after the build and reads the binary from CMAKE_BINARY_DIR.
     add_test(NAME Truncations.Check
         COMMAND sh -c [=[
             if ! "$0" -c "import clang.cindex" >/dev/null 2>&1; then exit 77; fi

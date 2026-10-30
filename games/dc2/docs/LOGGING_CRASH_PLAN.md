@@ -23,7 +23,7 @@ Scope: `port/` (plus the OpenCloud submodule where noted). Nothing touches `ps2/
 - **Existing logging is ad hoc** `std::println(stderr, ...)`/`fprintf` with a loose `"<module>: message"` convention. `Smoke.HeadlessFramesScreenshot` greps `dataread: indexed ` and `mglib: frame 3 written to`, so a plain stderr console sink with today's format must remain.
 - **PS2 game `printf`** (~760 calls in `ps2/src`) goes straight to host stdout. `port.h` is force-included into every TU and already has a ct_ps2-only branch, which is the hook to redirect it without touching `ps2/`.
 - **Crash handling is minimal**: `__assert` (`port/src/runtime.cpp`) prints and `_Exit(4)`; `PS2_UNIMPLEMENTED` aborts; `gfx::Fatal` exits 1; arena overflow aborts. No `set_terminate`, `SetUnhandledExceptionFilter` or `sigaction` anywhere.
-- **User data** lives under `PathsSaveRoot()` (`%LOCALAPPDATA%/chronicletwo/saves`, `$XDG_DATA_HOME/chronicletwo/saves`), alongside `config.json`, so logs and crash bundles go there too.
+- **User data** lives under `PathsSaveRoot()` (`%LOCALAPPDATA%/opencloud/dc2/saves`, `$XDG_DATA_HOME/opencloud/dc2/saves`), alongside `config.json`, so logs and crash bundles go there too.
 - **Startup order** is `GameSetIdentity -> PathsConsumeArgs -> ParseOptions -> ConfigLoad -> FirstRunRequireData -> ... -> MainLoop`, so logging boots in two stages: console first, file sink once the save root and config are known.
 
 ### Library findings
@@ -63,10 +63,10 @@ port/cmake/logging.cmake            FetchContent quill + cpptrace, attach to ct_
 Runtime layout under `PathsSaveRoot()`:
 
 ```
-logs/darkchronicle-20261018-142233-7f3a.log    one per session; newest log.keep (default 10) kept
+logs/opencloud-20261018-142233-7f3a.log    one per session; newest log.keep (default 10) kept
 crashes/20261018-142501-7f3a/
   report.txt         exception, registers, stack, game state, build, environment
-  darkchronicle.log  session log, flushed up to the crash (moved, not copied)
+  opencloud.log  session log, flushed up to the crash (moved, not copied)
   config.json        copy with user paths redacted
   minidump.dmp       phase 5 only
 crashes/last_crash.json                        read by the next launch to show a notice
@@ -79,7 +79,7 @@ The session id (`yyyymmdd-hhmmss-<4 hex>`) names the log, heads the log, appears
 ### Phase 0 — Debug info and symbol groundwork
 
 1. `CT_SYMBOLS` option: `embedded` for Debug/RelWithDebInfo, `split` for Release; Release gains `-gline-tables-only` on all platforms.
-2. Windows: `-gcodeview` + `-Wl,--pdb=` so lld writes `darkchronicle.pdb`. Keep DWARF until PDB-only symbolisation is verified, then consider `-Wl,--strip-debug`.
+2. Windows: `-gcodeview` + `-Wl,--pdb=` so lld writes `opencloud.pdb`. Keep DWARF until PDB-only symbolisation is verified, then consider `-Wl,--strip-debug`.
 3. Linux: `-Wl,--build-id`, POST_BUILD `llvm-objcopy --only-keep-debug` / `--strip-debug --add-gnu-debuglink`. macOS: `dsymutil`.
 4. CI uploads PDB/`.debug`/`.dSYM` keyed by build id and commit; `package.ps1` keeps PDBs out of the user zip; a sibling `package-symbols.ps1` zips them.
 5. `tools/crash/symbolize.py`: re-symbolise `module+offset` lines in a `report.txt` with `llvm-symbolizer`.

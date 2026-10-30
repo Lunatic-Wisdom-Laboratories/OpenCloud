@@ -22,11 +22,11 @@ class PathsXdg : public testing::Test {
 protected:
     void SetUp() override {
         saved_cwd_ = fs::current_path();
-        for (const char *name : {"LOCALAPPDATA", "KZTEST_DATA", "KZTEST_SAVE", "XDG_DATA_HOME", "HOME"}) {
+        for (const char *name : {"LOCALAPPDATA", "OCTEST_DATA", "OCTEST_SAVE", "XDG_DATA_HOME", "HOME"}) {
             saved_env_.push_back(dc::test::SaveEnv(name));
         }
         PathsReset();
-        PathsConfigure({.app_dir = "opencloud-test", .env_data = "KZTEST_DATA", .env_save = "KZTEST_SAVE"});
+        PathsConfigure({.app_dir = "opencloud-test", .env_data = "OCTEST_DATA", .env_save = "OCTEST_SAVE"});
         fs::path beside = PathsExecutable().parent_path();
         if (fs::exists(beside / "data") || fs::exists(beside / "save")) {
             GTEST_SKIP() << "the build directory holds data/ or save/";
@@ -57,8 +57,8 @@ fs::path Isolate(const char *tag) {
 #ifdef _WIN32
     dc::test::UnsetEnv("LOCALAPPDATA");
 #endif
-    dc::test::UnsetEnv("KZTEST_DATA");
-    dc::test::UnsetEnv("KZTEST_SAVE");
+    dc::test::UnsetEnv("OCTEST_DATA");
+    dc::test::UnsetEnv("OCTEST_SAVE");
     dc::test::SetEnv("XDG_DATA_HOME", (dir / "xdg"), 1);
     dc::test::SetEnv("HOME", (dir / "home"), 1);
     return dir;
@@ -121,7 +121,7 @@ TEST_F(PathsXdg, InstalledSaveDefaultIgnoresLocalRunFolders) {
     fs::path dir = Isolate("installed_save");
     fs::create_directories(dir / "work/data");
     fs::create_directories(dir / "work/save");
-    PathsConfigure({.app_dir = "opencloud-test", .env_data = "KZTEST_DATA", .env_save = "KZTEST_SAVE",
+    PathsConfigure({.app_dir = "opencloud-test", .env_data = "OCTEST_DATA", .env_save = "OCTEST_SAVE",
                     .installed_save_default = true});
 #ifdef _WIN32
     dc::test::SetEnv("LOCALAPPDATA", dir / "appdata", 1);
@@ -136,7 +136,7 @@ TEST_F(PathsXdg, InstalledSaveDefaultIgnoresLocalRunFolders) {
 TEST_F(PathsXdg, RunDirArgumentSelectsCoherentGameRoot) {
     fs::path dir = Isolate("run_dir");
     fs::create_directories(dir / "work/save");
-    PathsConfigure({.app_dir = "opencloud-test", .env_data = "KZTEST_DATA", .env_save = "KZTEST_SAVE",
+    PathsConfigure({.app_dir = "opencloud-test", .env_data = "OCTEST_DATA", .env_save = "OCTEST_SAVE",
                     .coherent_default_root = true});
     std::string run = PathsDisplay(dir / "port/run");
     const char *args[] = {"game", "--run-dir", run.c_str(), "--offscreen", nullptr};
@@ -150,7 +150,7 @@ TEST_F(PathsXdg, RunDirArgumentSelectsCoherentGameRoot) {
 
 TEST_F(PathsXdg, ExplicitDataAndSaveOverrideRunRootRegardlessOfArgumentOrder) {
     fs::path dir = Isolate("run_overrides");
-    PathsConfigure({.app_dir = "opencloud-test", .env_data = "KZTEST_DATA", .env_save = "KZTEST_SAVE",
+    PathsConfigure({.app_dir = "opencloud-test", .env_data = "OCTEST_DATA", .env_save = "OCTEST_SAVE",
                     .coherent_default_root = true});
     std::string data = PathsDisplay(dir / "other/data");
     std::string save = PathsDisplay(dir / "other/saves");
@@ -165,7 +165,7 @@ TEST_F(PathsXdg, ExplicitDataAndSaveOverrideRunRootRegardlessOfArgumentOrder) {
 TEST_F(PathsXdg, CoherentDefaultUsesPerUserRootEvenWithLocalData) {
     fs::path dir = Isolate("coherent_default");
     fs::create_directories(dir / "work/data");
-    PathsConfigure({.app_dir = "opencloud-test", .env_data = "KZTEST_DATA", .env_save = "KZTEST_SAVE",
+    PathsConfigure({.app_dir = "opencloud-test", .env_data = "OCTEST_DATA", .env_save = "OCTEST_SAVE",
                     .coherent_default_root = true});
 #ifdef _WIN32
     dc::test::SetEnv("LOCALAPPDATA", dir / "appdata", 1);
@@ -180,8 +180,8 @@ TEST_F(PathsXdg, CoherentDefaultUsesPerUserRootEvenWithLocalData) {
 
 TEST_F(PathsXdg, EnvironmentAndFlagsComeFirst) {
     fs::path dir = Isolate("override");
-    dc::test::SetEnv("KZTEST_DATA", (dir / "env_data"), 1);
-    dc::test::SetEnv("KZTEST_SAVE", (dir / "env_save"), 1);
+    dc::test::SetEnv("OCTEST_DATA", (dir / "env_data"), 1);
+    dc::test::SetEnv("OCTEST_SAVE", (dir / "env_save"), 1);
     ASSERT_TRUE(PathsDataRoot() == dir / "env_data");
     ASSERT_TRUE(PathsSaveRoot() == dir / "env_save");
     ASSERT_TRUE(!fs::exists(dir / "xdg"));
@@ -214,8 +214,8 @@ TEST_F(PathsXdg, LocalAppDataPreservesUnicode) {
 TEST_F(PathsXdg, OverridesPreserveUnicode) {
     fs::path dir = Isolate("unicode_overrides");
     fs::path base = dir / L"\u6d4b\u8bd5";
-    ASSERT_EQ(dc::test::SetEnv("KZTEST_DATA", base / "data", 1), 0);
-    ASSERT_EQ(dc::test::SetEnv("KZTEST_SAVE", base / "save", 1), 0);
+    ASSERT_EQ(dc::test::SetEnv("OCTEST_DATA", base / "data", 1), 0);
+    ASSERT_EQ(dc::test::SetEnv("OCTEST_SAVE", base / "save", 1), 0);
     ASSERT_EQ(PathsDataRoot(), base / "data");
     ASSERT_EQ(PathsSaveRoot(), base / "save");
     ASSERT_TRUE(fs::is_directory(base / "save"));

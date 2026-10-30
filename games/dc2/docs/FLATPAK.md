@@ -1,22 +1,22 @@
 # Flatpak
 
 The Linux release of the PC port (`docs/PC.md`) is a Flatpak,
-`org.themoonpeople.ChronicleTwo`. It holds `darkchronicle` and `dc2data` on the
+`io.github.lunatic_wisdom_laboratories.OpenCloud`. It holds `opencloud` and `dc2data` on the
 freedesktop 26.08 runtime, whose SDL3 and Vulkan loader it uses. No game data is in it: the first start asks for
 your own PAL disc and extracts it.
 
 ## Installing the bundle
 
-CI (`.github/workflows/pc.yml`) uploads `chronicletwo.flatpak` with every
+CI (`.github/workflows/pc.yml`) uploads `opencloud.flatpak` with every
 build. The runtime comes from Flathub:
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install --user chronicletwo.flatpak
-flatpak run org.themoonpeople.ChronicleTwo
+flatpak install --user opencloud.flatpak
+flatpak run io.github.lunatic_wisdom_laboratories.OpenCloud
 ```
 
-It also appears in the desktop's application list as Chronicle Two.
+It also appears in the desktop's application list as OpenCloud.
 
 ## The first start
 
@@ -35,26 +35,26 @@ prints the `dc2data` command below.
 holding the image, granted for that one command:
 
 ```sh
-flatpak run --filesystem="$HOME/Games:ro" --command=dc2data org.themoonpeople.ChronicleTwo \
-    extract "$HOME/Games/Dark Chronicle (PAL).iso" ~/.var/app/org.themoonpeople.ChronicleTwo/data/chronicletwo/data
+flatpak run --filesystem="$HOME/Games:ro" --command=dc2data io.github.lunatic_wisdom_laboratories.OpenCloud \
+    extract "$HOME/Games/Dark Chronicle (PAL).iso" ~/.var/app/io.github.lunatic_wisdom_laboratories.OpenCloud/data/opencloud/dc2/data
 ```
 
 ## Where things live
 
-Inside the sandbox `XDG_DATA_HOME` is `~/.var/app/org.themoonpeople.ChronicleTwo/data`,
+Inside the sandbox `XDG_DATA_HOME` is `~/.var/app/io.github.lunatic_wisdom_laboratories.OpenCloud/data`,
 so:
 
 | | |
 |---|---|
-| game data | `~/.var/app/org.themoonpeople.ChronicleTwo/data/chronicletwo/data` and `port_data` beside it |
-| saves and the pipeline cache | `~/.var/app/org.themoonpeople.ChronicleTwo/data/chronicletwo/saves` |
+| game data | `~/.var/app/io.github.lunatic_wisdom_laboratories.OpenCloud/data/opencloud/dc2/data` and `port_data` beside it |
+| saves and the pipeline cache | `~/.var/app/io.github.lunatic_wisdom_laboratories.OpenCloud/data/opencloud/dc2/saves` |
 
 `config.json` and `logs/` live one level above `saves/`, in
-`~/.var/app/org.themoonpeople.ChronicleTwo/data/chronicletwo`.
+`~/.var/app/io.github.lunatic_wisdom_laboratories.OpenCloud/data/opencloud/dc2`.
 
 `config.json` is described in `docs/PC.md`. `flatpak uninstall --delete-data
-org.themoonpeople.ChronicleTwo` removes both. The usual options still apply:
-`flatpak run org.themoonpeople.ChronicleTwo --window 1920x1080`.
+io.github.lunatic_wisdom_laboratories.OpenCloud` removes both. The usual options still apply:
+`flatpak run io.github.lunatic_wisdom_laboratories.OpenCloud --window 1920x1080`.
 
 ## Controls
 
@@ -81,7 +81,7 @@ through the file-chooser portal, which every Flatpak may call without a
 port/flatpak.sh
 ```
 
-builds `chronicletwo.flatpak` in the repository root from the working tree,
+builds `opencloud.flatpak` in the repository root from the working tree,
 installing the runtime, the SDK and the llvm22 extension from Flathub when
 they are missing. `INSTALL=1` also installs the bundle for this user;
 `CLEAN=1` discards flatpak-builder's cache first. By hand, the same is:
@@ -90,17 +90,17 @@ they are missing. `INSTALL=1` also installs the bundle for this user;
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak install --user flathub org.freedesktop.Platform//26.08 org.freedesktop.Sdk//26.08 \
     org.freedesktop.Sdk.Extension.llvm22//26.08
-flatpak-builder --repo=repo build-dir port/flatpak/org.themoonpeople.ChronicleTwo.yml
-flatpak build-bundle repo chronicletwo.flatpak org.themoonpeople.ChronicleTwo
+flatpak-builder --repo=repo build-dir port/flatpak/io.github.lunatic_wisdom_laboratories.OpenCloud.yml
+flatpak build-bundle repo opencloud.flatpak io.github.lunatic_wisdom_laboratories.OpenCloud
 ```
 
 (`flatpak-builder --install-deps-from=flathub ...` installs the three for
 you.) Run from the repository root; `build-dir/`, `repo/`, `.flatpak-builder/`
-and `chronicletwo.flatpak` are ignored by git. `flatpak-builder --user --install
-build-dir port/flatpak/org.themoonpeople.ChronicleTwo.yml` installs the build
+and `opencloud.flatpak` are ignored by git. `flatpak-builder --user --install
+build-dir port/flatpak/io.github.lunatic_wisdom_laboratories.OpenCloud.yml` installs the build
 directly instead of through a bundle.
 
-The manifest (`port/flatpak/org.themoonpeople.ChronicleTwo.yml`) builds the port
+The manifest (`port/flatpak/io.github.lunatic_wisdom_laboratories.OpenCloud.yml`) builds the port
 and what it needs for the build alone; SDL3 and the Vulkan headers come from the
 SDK:
 

@@ -16,7 +16,7 @@ case $preset in
     linux-x64-release) build=port/build/pc-release ;;
     *) build=port/build/$preset ;;
 esac
-"$root/build.sh" "$preset" --target darkchronicle dc2data
+"$root/build.sh" "$preset" --target opencloud dc2data
 
 # The retail image by name, else any disc image in rom/pal, else an extracted disc.
 source="rom/pal/Dark Chronicle (PAL).iso"
@@ -34,4 +34,4 @@ fi
 
 # Script runs log at debug to the console (docs/LOGGING.md); a DC2_LOG of the user's own still wins.
 export DC2_LOG="${DC2_LOG:-debug}"
-exec "$build/darkchronicle" --run-dir "$root/port/run" "$@"
+exec "$build/opencloud" --run-dir "$root/port/run" "$@"

@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>org.themoonpeople.ChronicleTwo</id>
+  <id>io.github.lunatic_wisdom_laboratories.OpenCloud</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <name>Chronicle Two</name>
+  <name>OpenCloud</name>
   <summary>Native port of a PlayStation 2 action RPG, built from its decompilation</summary>
-  <developer id="org.themoonpeople">
-    <name>TheMoonPeople</name>
+  <developer id="io.github.lunatic_wisdom_laboratories">
+    <name>The OpenCloud contributors</name>
   </developer>
   <description>
     <p>
-      Chronicle Two is a decompilation of the PlayStation 2 game Dark Chronicle (Dark Cloud 2),
-      rebuilt from that source code as a native program that runs on Vulkan and SDL. It is not an
+      OpenCloud runs the PlayStation 2 game Dark Chronicle (Dark Cloud 2) natively, rebuilt from
+      its decompiled source code as a program that runs on Vulkan and SDL. It is not an
       emulator, and it is not affiliated with or endorsed by the game's developer or publisher.
     </p>
     <p>
@@ -19,10 +19,10 @@
       them from there. Saves are kept in the same place.
     </p>
   </description>
-  <launchable type="desktop-id">org.themoonpeople.ChronicleTwo.desktop</launchable>
-  <url type="homepage">https://github.com/TheMoonPeople/ChronicleTwo</url>
-  <url type="bugtracker">https://github.com/TheMoonPeople/ChronicleTwo/issues</url>
-  <url type="vcs-browser">https://github.com/TheMoonPeople/ChronicleTwo</url>
+  <launchable type="desktop-id">io.github.lunatic_wisdom_laboratories.OpenCloud.desktop</launchable>
+  <url type="homepage">https://github.com/Lunatic-Wisdom-Laboratories/OpenCloud</url>
+  <url type="bugtracker">https://github.com/Lunatic-Wisdom-Laboratories/OpenCloud/issues</url>
+  <url type="vcs-browser">https://github.com/Lunatic-Wisdom-Laboratories/OpenCloud</url>
   <categories>
     <category>Game</category>
     <category>RolePlaying</category>

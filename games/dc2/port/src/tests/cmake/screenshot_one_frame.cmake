@@ -25,7 +25,7 @@ endforeach()
 message("ONE_FRAME_CAPTURE_OK")
 ]=])
 add_test(NAME Screenshot.OneFrameCommandLine
-    COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:darkchronicle>
+    COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:opencloud>
         -DROOT=${CMAKE_BINARY_DIR}/one-frame-capture
         -DEMPTY_DATA_FIXTURE=${CMAKE_CURRENT_LIST_DIR}/empty_data.cmake
         -DDATA_VERSION_SOURCE=${OC_ROOT}/data_version.json -P ${one_frame_script})

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Build the PC port as a Flatpak (docs/FLATPAK.md) from the working tree, on
 # the host: flatpak-builder brings its own sandbox, so the dev container is
-# not involved. The result is chronicletwo.flatpak in the repository root.
+# not involved. The result is opencloud.flatpak in the repository root.
 #
-#   port/flatpak.sh              build chronicletwo.flatpak
+#   port/flatpak.sh              build opencloud.flatpak
 #   INSTALL=1 port/flatpak.sh    also install it for this user
 #   CLEAN=1 port/flatpak.sh      throw flatpak-builder's cache away first, so
 #                                every module is built again
@@ -15,9 +15,9 @@ set -euo pipefail
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-APP_ID=org.themoonpeople.ChronicleTwo
+APP_ID=io.github.lunatic_wisdom_laboratories.OpenCloud
 MANIFEST=port/flatpak/$APP_ID.yml
-BUNDLE=chronicletwo.flatpak
+BUNDLE=opencloud.flatpak
 
 usage() {
     echo "Usage: port/flatpak.sh"

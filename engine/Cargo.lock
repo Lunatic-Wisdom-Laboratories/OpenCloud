@@ -1266,28 +1266,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencloud_core"
-version = "0.1.0"
-dependencies = [
- "cc",
- "crc32fast",
- "cxx",
- "eframe",
- "encoding_rs",
- "gpt_disk_io",
- "iso9660-rs",
- "libc",
- "memmap2",
- "png",
- "rayon",
- "rfd",
- "serde_json",
- "sha2",
- "tempfile",
- "zstd",
-]
-
-[[package]]
 name = "khronos_api"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1827,6 +1805,28 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "opencloud_core"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "crc32fast",
+ "cxx",
+ "eframe",
+ "encoding_rs",
+ "gpt_disk_io",
+ "iso9660-rs",
+ "libc",
+ "memmap2",
+ "png",
+ "rayon",
+ "rfd",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "zstd",
+]
 
 [[package]]
 name = "orbclient"

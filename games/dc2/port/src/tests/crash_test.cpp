@@ -114,7 +114,7 @@ start.store(true, std::memory_order_release);
                                          .platform = "x86_64-windows",
                                          .time_utc = "2026-10-18T14:25:01Z",
                                          .frame = 77});
-        EXPECT_EQ(out.View(), "Dark Chronicle crash report\n"
+        EXPECT_EQ(out.View(), "OpenCloud crash report\n"
                               "kind:       crash\n"
                               "session:    20261018-142233-7f3a\n"
                               "build id:   ABCDEF01\n"
@@ -140,10 +140,10 @@ start.store(true, std::memory_order_release);
     }
 
     TEST(CrashRedact, ReplacesRootsAndHome) {
-        const crash_detail::RedactRoots roots{.save_root = "/home/max/.local/share/chronicletwo/saves",
+        const crash_detail::RedactRoots roots{.save_root = "/home/max/.local/share/opencloud/dc2/saves",
                                               .data_root = "/opt/dc2/data",
                                               .home = "/home/max"};
-        EXPECT_EQ(crash_detail::RedactPath("/home/max/.local/share/chronicletwo/saves/config.json", roots), "<save>/config.json");
+        EXPECT_EQ(crash_detail::RedactPath("/home/max/.local/share/opencloud/dc2/saves/config.json", roots), "<save>/config.json");
         EXPECT_EQ(crash_detail::RedactPath("data at /opt/dc2/data", roots), "data at <data>");
         EXPECT_EQ(crash_detail::RedactPath("/home/max/Games/x", roots), "<home>/Games/x");
         EXPECT_EQ(crash_detail::RedactPath("/home/maxine/x", roots), "/home/maxine/x");
@@ -151,10 +151,10 @@ start.store(true, std::memory_order_release);
     }
 
     TEST(CrashRedact, MatchesEitherSeparatorAndJsonEscaping) {
-        const crash_detail::RedactRoots roots{.save_root = R"(C:\Users\Max\AppData\Local\chronicletwo\saves)",
+        const crash_detail::RedactRoots roots{.save_root = R"(C:\Users\Max\AppData\Local\opencloud\dc2\saves)",
                                               .data_root = "",
                                               .home = R"(C:\Users\Max)"};
-        EXPECT_EQ(crash_detail::RedactPath(R"({"path": "C:\\Users\\Max\\AppData\\Local\\chronicletwo\\saves\\x"})", roots),
+        EXPECT_EQ(crash_detail::RedactPath(R"({"path": "C:\\Users\\Max\\AppData\\Local\\opencloud\\dc2\\saves\\x"})", roots),
                   R"({"path": "<save>\\x"})");
         EXPECT_EQ(crash_detail::RedactPath("C:/Users/Max/Documents", roots), "<home>/Documents");
         EXPECT_EQ(crash_detail::RedactPath("C:\\Users\\Max\\Documents", roots), "<home>\\Documents");

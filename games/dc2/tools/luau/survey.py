@@ -36,8 +36,8 @@ def resolve_data(argument: Path | None) -> Path | None:
         candidates.append(Path(os.environ["DC2_DATA"]))
     candidates.append(REPO / "port" / "run")
     if os.environ.get("LOCALAPPDATA"):
-        candidates.append(Path(os.environ["LOCALAPPDATA"]) / "chronicletwo" / "data")
-    candidates.append(Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "chronicletwo" / "data")
+        candidates.append(Path(os.environ["LOCALAPPDATA"]) / "opencloud" / "dc2" / "data")
+    candidates.append(Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "opencloud" / "dc2" / "data")
     for candidate in candidates:
         if candidate.is_file():
             return candidate

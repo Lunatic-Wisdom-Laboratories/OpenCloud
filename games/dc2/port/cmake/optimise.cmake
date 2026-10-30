@@ -35,15 +35,15 @@ if(NOT CT_LTO STREQUAL "off")
         "$<${ct_optimised}:$<IF:$<CONFIG:MinSizeRel>,-Os,-O3>>")
     if(APPLE)
         # ld64 deletes the objects LTO generates once it links, and with them the DWARF dsymutil collects
-        # into darkchronicle.dSYM; kept here, the dSYM still names file:line.
-        set(ct_lto_objects ${CMAKE_BINARY_DIR}/lto/darkchronicle)
+        # into opencloud.dSYM; kept here, the dSYM still names file:line.
+        set(ct_lto_objects ${CMAKE_BINARY_DIR}/lto/opencloud)
         if(CT_LTO STREQUAL "thin")
             file(MAKE_DIRECTORY ${ct_lto_objects})
         else()
             file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/lto)
             set(ct_lto_objects ${ct_lto_objects}.o)
         endif()
-        target_link_options(darkchronicle PRIVATE $<${ct_optimised}:-Wl,-object_path_lto,${ct_lto_objects}>)
+        target_link_options(opencloud PRIVATE $<${ct_optimised}:-Wl,-object_path_lto,${ct_lto_objects}>)
     elseif(CT_LTO STREQUAL "thin")
         target_link_options(ct_options INTERFACE
             $<${ct_optimised}:-Wl,--thinlto-cache-dir=${CMAKE_BINARY_DIR}/lto-cache/$<TARGET_PROPERTY:NAME>>)

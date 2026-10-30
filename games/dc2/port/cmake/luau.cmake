@@ -12,9 +12,9 @@ FetchContent_MakeAvailable(luau)
 # Only what the game and the tools depend on is built.
 set_property(DIRECTORY ${luau_SOURCE_DIR} PROPERTY EXCLUDE_FROM_ALL TRUE)
 configure_file(${luau_SOURCE_DIR}/LICENSE.txt ${CMAKE_BINARY_DIR}/Luau-LICENSE.txt COPYONLY)
-install(FILES ${CMAKE_BINARY_DIR}/Luau-LICENSE.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/chronicletwo)
+install(FILES ${CMAKE_BINARY_DIR}/Luau-LICENSE.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/opencloud)
 
-# ct_options is the interface ct_link_game hands to the game and to darkchronicle_tests.
+# ct_options is the interface ct_link_game hands to the game and to opencloud_tests.
 target_link_libraries(ct_options INTERFACE Luau.VM Luau.Compiler Luau.CodeGen)
 
 # Analysis calls std::abs without including <cstdlib>, which libc++ does not include for it.
@@ -116,7 +116,7 @@ if(CT_LUAU_PRECOMPILE)
 endif()
 add_custom_target(ct_luau_scripts DEPENDS ${CT_LUAU_COPIES})
 add_dependencies(ct_luau_scripts ct_luau_prune)
-add_dependencies(darkchronicle ct_luau_scripts)
+add_dependencies(opencloud ct_luau_scripts)
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/port/src/luau/ DESTINATION ${CMAKE_INSTALL_BINDIR}/scripts
     FILES_MATCHING PATTERN "*.luau" PATTERN "*.d.luau" EXCLUDE)
 # An install likewise removes the modules an earlier install put there whose sources are gone, recording what it

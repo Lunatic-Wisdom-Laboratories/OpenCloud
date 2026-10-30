@@ -81,7 +81,7 @@ jobs:
         env:
           IPHONEOS_DEPLOYMENT_TARGET: "16.3"
         # -k 0 reports every unit that fails, not only the first.
-        run: cmake --build port/build/ios-arm64-release --target darkchronicle -j"$(sysctl -n hw.ncpu)" -- -k 0
+        run: cmake --build port/build/ios-arm64-release --target opencloud -j"$(sysctl -n hw.ncpu)" -- -k 0
 
       # The .ipa is unsigned: a sideloading tool (Sideloadly, AltStore) signs it with the installer's Apple ID.
       # The button symbols and the gameplay seed (assets/data.zip) go inside the bundle, which is where the game
@@ -90,43 +90,43 @@ jobs:
         run: |
           build=port/build/ios-arm64-release
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
-          cp -R "$build/darkchronicle.app" "$RUNNER_TEMP/ipa/Payload/"
+          cp -R "$build/opencloud.app" "$RUNNER_TEMP/ipa/Payload/"
           # The split debug symbols would double the download; they are no part of the app.
-          rm -rf "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/darkchronicle.dSYM"
-          cp -R "$build/glyphs" "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/"
+          rm -rf "$RUNNER_TEMP/ipa/Payload/opencloud.app/opencloud.dSYM"
+          cp -R "$build/glyphs" "$RUNNER_TEMP/ipa/Payload/opencloud.app/"
           # The Luau scripts the events run, which the game finds in scripts/ beside its executable.
-          cp -R "$build/scripts" "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/"
-          test -n "$(find "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/scripts" -name '*.luau' | head -n1)"
+          cp -R "$build/scripts" "$RUNNER_TEMP/ipa/Payload/opencloud.app/"
+          test -n "$(find "$RUNNER_TEMP/ipa/Payload/opencloud.app/scripts" -name '*.luau' | head -n1)"
           # Each one with its bytecode, so the device does not compile them (CT_LUAU_PRECOMPILE).
-          test -n "$(find "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/scripts" -name '*.luauc' | head -n1)"
-          mkdir -p "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/assets"
-          cp "$build/assets/data.zip" "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/assets/"
+          test -n "$(find "$RUNNER_TEMP/ipa/Payload/opencloud.app/scripts" -name '*.luauc' | head -n1)"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload/opencloud.app/assets"
+          cp "$build/assets/data.zip" "$RUNNER_TEMP/ipa/Payload/opencloud.app/assets/"
           # The home screen icon, which SideStore and LiveContainer also show.
-          sips -z 120 120 port/assets/icon/chronicletwo-512.png --out "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/AppIcon60x60@2x.png"
-          sips -z 180 180 port/assets/icon/chronicletwo-512.png --out "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/AppIcon60x60@3x.png"
+          sips -z 120 120 port/assets/icon/opencloud-ios-1024.png --out "$RUNNER_TEMP/ipa/Payload/opencloud.app/AppIcon60x60@2x.png"
+          sips -z 180 180 port/assets/icon/opencloud-ios-1024.png --out "$RUNNER_TEMP/ipa/Payload/opencloud.app/AppIcon60x60@3x.png"
           # A quick check of what sideloading and LiveContainer need: an arm64, position-independent executable.
-          file "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/darkchronicle"
-          otool -hv "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/darkchronicle" | grep -q PIE
-          otool -l "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/darkchronicle" | grep -A4 LC_BUILD_VERSION
+          file "$RUNNER_TEMP/ipa/Payload/opencloud.app/opencloud"
+          otool -hv "$RUNNER_TEMP/ipa/Payload/opencloud.app/opencloud" | grep -q PIE
+          otool -l "$RUNNER_TEMP/ipa/Payload/opencloud.app/opencloud" | grep -A4 LC_BUILD_VERSION
           # libc++ symbols newer than the minimum iOS kill the app in dyld before main. std::pmr (iOS 17) slipped in
           # once, and iOS 16.3.1 has no floating-point std::to_chars although the headers say 16.3.
-          if nm -u "$RUNNER_TEMP/ipa/Payload/darkchronicle.app/darkchronicle" | grep -E '__ZNSt3__1(3pmr|8to_chars)'; then
+          if nm -u "$RUNNER_TEMP/ipa/Payload/opencloud.app/opencloud" | grep -E '__ZNSt3__1(3pmr|8to_chars)'; then
             echo "the executable imports libc++ symbols that iOS 16 lacks" >&2
             exit 1
           fi
-          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/games/dc2/DarkChronicle.ipa" Payload)
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/games/dc2/OpenCloud.ipa" Payload)
 
       - name: Upload the .ipa
         uses: actions/upload-artifact@v7
         with:
-          name: DarkChronicle-ios-arm64
-          path: games/dc2/DarkChronicle.ipa
+          name: OpenCloud-ios-arm64
+          path: games/dc2/OpenCloud.ipa
           if-no-files-found: error
 
       # The symbols stay out of the .ipa but are kept to read the addresses in a device's stack reports.
       - name: Upload the debug symbols
         uses: actions/upload-artifact@v7
         with:
-          name: DarkChronicle-ios-arm64-dSYM
-          path: games/dc2/port/build/ios-arm64-release/darkchronicle.app/darkchronicle.dSYM
+          name: OpenCloud-ios-arm64-dSYM
+          path: games/dc2/port/build/ios-arm64-release/opencloud.app/opencloud.dSYM
           if-no-files-found: warn

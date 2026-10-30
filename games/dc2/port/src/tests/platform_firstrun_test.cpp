@@ -90,10 +90,10 @@ TEST_F(PlatformFirstRun, MessageNamesRootAndExtractionCommand) {
 #ifndef _WIN32
 TEST_F(PlatformFirstRun, MessageInsideTheFlatpakNamesItsCommand) {
     EXPECT_EQ(FirstRunDataMessage(Root()).find("flatpak run"), std::string::npos);
-    ASSERT_EQ(setenv("FLATPAK_ID", "org.themoonpeople.ChronicleTwo", 1), 0);
+    ASSERT_EQ(setenv("FLATPAK_ID", "io.github.lunatic_wisdom_laboratories.OpenCloud", 1), 0);
     const std::string message = FirstRunDataMessage(Root());
     EXPECT_EQ(unsetenv("FLATPAK_ID"), 0);
-    EXPECT_NE(message.find("--command=dc2data org.themoonpeople.ChronicleTwo extract <disc image> " + PathsDisplay(Root())),
+    EXPECT_NE(message.find("--command=dc2data io.github.lunatic_wisdom_laboratories.OpenCloud extract <disc image> " + PathsDisplay(Root())),
               std::string::npos)
         << message;
 }

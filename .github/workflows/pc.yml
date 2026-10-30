@@ -54,7 +54,7 @@ jobs:
 
       # Lavapipe renders on the CPU, so the unit tests' per-case limit is widened from its 5 second default, and the
       # cases that compile every pipeline get three minutes: GfxGpuMeshDc2's fog cases take 26 to 128 s under -j4.
-      # CT_SYMBOLS=split also writes darkchronicle.debug with objcopy, which the symboliser check reads.
+      # CT_SYMBOLS=split also writes opencloud.debug with objcopy, which the symboliser check reads.
       # Debug keeps the Vulkan validation layer and assertions on; the Flatpak is the shipped, Release Linux build.
       - name: Configure
         run: cmake --preset linux-x64 -DCT_TEST_TIMEOUT=60 -DCT_GPU_SLOW_TIMEOUT=180 -DCT_PAL_TIMING_BASE="$CT_PAL_TIMING_BASE" -DCT_SYMBOLS=split
@@ -79,21 +79,21 @@ jobs:
       # A raw frame at main resolves to main.cpp through the build id'd binary's split debug file.
       - name: Check the build id and the split symbols
         run: |
-          llvm-readelf --notes port/build/pc/darkchronicle | grep -q 'Build ID'
-          llvm-readelf --sections port/build/pc/darkchronicle | grep -q '.gnu_debuglink'
-          offset=$(llvm-nm port/build/pc/darkchronicle | awk '$3 == "main" { print $1 }')
-          printf '#0  darkchronicle+0x%s\n' "$offset" > report.txt
-          python3 tools/crash/symbolize.py report.txt --binary port/build/pc/darkchronicle.debug | tee symbolized.txt
+          llvm-readelf --notes port/build/pc/opencloud | grep -q 'Build ID'
+          llvm-readelf --sections port/build/pc/opencloud | grep -q '.gnu_debuglink'
+          offset=$(llvm-nm port/build/pc/opencloud | awk '$3 == "main" { print $1 }')
+          printf '#0  opencloud+0x%s\n' "$offset" > report.txt
+          python3 tools/crash/symbolize.py report.txt --binary port/build/pc/opencloud.debug | tee symbolized.txt
           grep -q 'main.cpp:' symbolized.txt
 
       # The VU1 programs are native: their packed CPU halves live only in the test oracles.
       - name: Check that no PS2 packing or VU1 layout helper is in the runtime
-        run: python3 scripts/port/native_gate.py --binary port/build/pc/darkchronicle
+        run: python3 scripts/port/native_gate.py --binary port/build/pc/opencloud
 
       # A non-PIE link places the game below 4 GiB, where a pointer truncated to 32 bits still works and hides the bug.
-      - name: Check that darkchronicle is position-independent
+      - name: Check that opencloud is position-independent
         run: |
-          llvm-readobj --file-headers port/build/pc/darkchronicle | grep -q 'Type: SharedObject'
+          llvm-readobj --file-headers port/build/pc/opencloud | grep -q 'Type: SharedObject'
 
   macos:
     name: Build and test (macOS arm64)
@@ -147,32 +147,32 @@ jobs:
         run: cargo test --locked --manifest-path ../../engine/Cargo.toml
 
       - name: Package the macOS build
-        run: tar -czf artifacts/chronicletwo-macos-arm64.tar.gz -C port/build/macos-arm64-release darkchronicle scripts Luau-LICENSE.txt -C assets data.zip
+        run: tar -czf artifacts/opencloud-dc2-macos-arm64.tar.gz -C port/build/macos-arm64-release opencloud scripts Luau-LICENSE.txt -C assets data.zip
 
       - name: Upload the macOS build
         uses: actions/upload-artifact@v7
         with:
-          name: chronicletwo-macos-arm64
-          path: games/dc2/artifacts/chronicletwo-macos-arm64.tar.gz
+          name: opencloud-dc2-macos-arm64
+          path: games/dc2/artifacts/opencloud-dc2-macos-arm64.tar.gz
           if-no-files-found: error
 
       # Without Homebrew's llvm on PATH the symboliser falls back to atos, against the dSYM.
       - name: Check the dSYM resolves a frame
         run: |
-          address=$(nm port/build/macos-arm64-release/darkchronicle | awk '$3 == "_main" { print $1 }')
-          printf '#0  darkchronicle+0x%x\n' $((0x$address - 0x100000000)) > report.txt
-          python3 tools/crash/symbolize.py report.txt --binary port/build/macos-arm64-release/darkchronicle.dSYM | tee symbolized.txt
+          address=$(nm port/build/macos-arm64-release/opencloud | awk '$3 == "_main" { print $1 }')
+          printf '#0  opencloud+0x%x\n' $((0x$address - 0x100000000)) > report.txt
+          python3 tools/crash/symbolize.py report.txt --binary port/build/macos-arm64-release/opencloud.dSYM | tee symbolized.txt
           grep -q 'main.cpp:' symbolized.txt
 
       # docs/SYMBOLS.md: tools/crash/symbolize.py resolves a report from this build with the dSYM.
       - name: Package the macOS symbols
-        run: tar -czf artifacts/chronicletwo-macos-arm64-symbols.tar.gz -C port/build/macos-arm64-release darkchronicle darkchronicle.dSYM
+        run: tar -czf artifacts/opencloud-dc2-macos-arm64-symbols.tar.gz -C port/build/macos-arm64-release opencloud opencloud.dSYM
 
       - name: Upload the macOS symbols
         uses: actions/upload-artifact@v7
         with:
-          name: chronicletwo-macos-arm64-symbols-${{ github.sha }}
-          path: games/dc2/artifacts/chronicletwo-macos-arm64-symbols.tar.gz
+          name: opencloud-dc2-macos-arm64-symbols-${{ github.sha }}
+          path: games/dc2/artifacts/opencloud-dc2-macos-arm64-symbols.tar.gz
           if-no-files-found: error
 
       - name: Upload the Vulkan description
@@ -222,34 +222,34 @@ jobs:
 
       - name: Package the Windows build
         run: |
-          ./tools/windows/package.ps1 -BuildDirectory port/build/windows-x64-release-tests -Destination chronicletwo-windows-x64.zip
+          ./tools/windows/package.ps1 -BuildDirectory port/build/windows-x64-release-tests -Destination opencloud-dc2-windows-x64.zip
 
       - name: Upload the Windows build
         uses: actions/upload-artifact@v7
         with:
-          name: chronicletwo-windows-x64
-          path: games/dc2/chronicletwo-windows-x64.zip
+          name: opencloud-dc2-windows-x64
+          path: games/dc2/opencloud-dc2-windows-x64.zip
           if-no-files-found: error
 
       - name: Check the executable resolves a frame
         run: |
           $llvm = "$env:RUNNER_TEMP/deps/llvm/llvm-mingw-20260922-ucrt-x86_64/bin"
-          $exe = 'port/build/windows-x64-release-tests/darkchronicle.exe'
+          $exe = 'port/build/windows-x64-release-tests/opencloud.exe'
           $address = (& "$llvm/llvm-nm.exe" $exe | Where-Object { $_ -match ' T wmain$' }).Split(' ')[0]
-          '#0  darkchronicle.exe+0x{0:x}' -f ([Convert]::ToUInt64($address, 16) - 0x140000000) | Set-Content report.txt
+          '#0  opencloud.exe+0x{0:x}' -f ([Convert]::ToUInt64($address, 16) - 0x140000000) | Set-Content report.txt
           python tools/crash/symbolize.py report.txt --binary $exe --llvm-symbolizer "$llvm/llvm-symbolizer.exe" | Tee-Object symbolized.txt
           if (!(Select-String -Quiet -Path symbolized.txt -Pattern 'main.cpp:')) { exit 1 }
 
       # docs/SYMBOLS.md: the executables (their DWARF), any PDBs and their build ids, for tools/crash/symbolize.py.
       - name: Package the Windows symbols
         run: |
-          ./tools/windows/package-symbols.ps1 -Root $env:RUNNER_TEMP -BuildDirectory port/build/windows-x64-release-tests -Destination chronicletwo-windows-x64-symbols.zip
+          ./tools/windows/package-symbols.ps1 -Root $env:RUNNER_TEMP -BuildDirectory port/build/windows-x64-release-tests -Destination opencloud-dc2-windows-x64-symbols.zip
 
       - name: Upload the Windows symbols
         uses: actions/upload-artifact@v7
         with:
-          name: chronicletwo-windows-x64-symbols-${{ github.sha }}
-          path: games/dc2/chronicletwo-windows-x64-symbols.zip
+          name: opencloud-dc2-windows-x64-symbols-${{ github.sha }}
+          path: games/dc2/opencloud-dc2-windows-x64-symbols.zip
           if-no-files-found: error
 
   # docs/FLATPAK.md: the Linux build packaged in Flathub's freedesktop 26.08 image. The manifest uses the
@@ -277,7 +277,7 @@ jobs:
       - name: Point the manifest at this commit
         run: |
           awk -v commit="$GITHUB_SHA" '
-            /# chronicletwo-source:/ {
+            /# opencloud-source:/ {
               print
               print "      - type: git"
               print "        path: ../.."
@@ -285,32 +285,32 @@ jobs:
               skip = 1
               next
             }
-            /# chronicletwo-source-end/ { skip = 0 }
+            /# opencloud-source-end/ { skip = 0 }
             !skip { print }
-          ' port/flatpak/org.themoonpeople.ChronicleTwo.yml > "$MANIFEST"
-          sed -n '/name: chronicletwo$/,$p' "$MANIFEST" | head -80
+          ' port/flatpak/io.github.lunatic_wisdom_laboratories.OpenCloud.yml > "$MANIFEST"
+          sed -n '/name: opencloud$/,$p' "$MANIFEST" | head -80
 
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           manifest-path: ${{ env.MANIFEST }}
-          bundle: chronicletwo.flatpak
-          artifact-name: chronicletwo-x86_64.flatpak
-          cache-key: flatpak-builder-${{ hashFiles('port/flatpak/org.themoonpeople.ChronicleTwo.yml', 'port/flatpak/cargo-sources.json') }}
+          bundle: opencloud.flatpak
+          artifact-name: opencloud-dc2-x86_64.flatpak
+          cache-key: flatpak-builder-${{ hashFiles('port/flatpak/io.github.lunatic_wisdom_laboratories.OpenCloud.yml', 'port/flatpak/cargo-sources.json') }}
 
-      - name: Start darkchronicle without data
+      - name: Start opencloud without data
         run: |
           set +e
-          flatpak build --env=XDG_DATA_HOME=/tmp/xdg flatpak_app darkchronicle --headless --frames 1 > run.txt 2>&1
+          flatpak build --env=XDG_DATA_HOME=/tmp/xdg flatpak_app opencloud --headless --frames 1 > run.txt 2>&1
           status=$?
           cat run.txt
-          echo "darkchronicle exited $status"
-          [ "$status" -eq 3 ] && grep -q 'No current Dark Chronicle data at /tmp/xdg/chronicletwo/data' run.txt
+          echo "opencloud exited $status"
+          [ "$status" -eq 3 ] && grep -q 'No current Dark Chronicle data at /tmp/xdg/opencloud/dc2/data' run.txt
 
-      # The packaged darkchronicle keeps its line tables (the manifest sets no-debuginfo), so it is its own
+      # The packaged opencloud keeps its line tables (the manifest sets no-debuginfo), so it is its own
       # symbol file for tools/crash/symbolize.py.
       - name: Upload the Flatpak symbols
         uses: actions/upload-artifact@v7
         with:
-          name: chronicletwo-flatpak-x86_64-symbols-${{ github.sha }}
-          path: games/dc2/flatpak_app/files/bin/darkchronicle
+          name: opencloud-dc2-flatpak-x86_64-symbols-${{ github.sha }}
+          path: games/dc2/flatpak_app/files/bin/opencloud
           if-no-files-found: error

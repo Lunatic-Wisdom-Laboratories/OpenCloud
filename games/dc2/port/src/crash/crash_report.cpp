@@ -673,8 +673,8 @@ void CopyLog(const Capture &capture) {
     } else {
         // A copy, not a move: the backend still holds the file open.
         std::error_code error;
-        std::filesystem::copy_file(log, g_bundle.dir_path / "darkchronicle.log", std::filesystem::copy_options::overwrite_existing, error);
-        out += error ? std::format("copy failed: {}\n", error.message()) : std::string("darkchronicle.log\n");
+        std::filesystem::copy_file(log, g_bundle.dir_path / "opencloud.log", std::filesystem::copy_options::overwrite_existing, error);
+        out += error ? std::format("copy failed: {}\n", error.message()) : std::string("opencloud.log\n");
     }
     Emit(out);
 }
@@ -896,7 +896,7 @@ std::string_view CrashKindName(CrashKind kind) {
 }
 
 void FormatHeader(Text &out, const HeaderInfo &info) {
-    out.Put("Dark Chronicle crash report\n");
+    out.Put("OpenCloud crash report\n");
     out.Put("kind:       ").Put(info.kind).Put('\n');
     out.Put("session:    ").Put(info.session.empty() ? "-" : info.session).Put('\n');
     out.Put("build id:   ").Put(info.build_id.empty() ? "-" : info.build_id).Put('\n');

@@ -5,7 +5,7 @@ Runs one input script through the game at a reference size, each Fill size, and 
 each plain and with --display-per-tick 4. Checks logical-frame PSNR, display-per-tick identity,
 and letterbox geometry, then writes report.md and summary.json to the work dir.
 
-  python scripts/port/matrix.py --exe <darkchronicle> --input <script> --frame N [--scene NAME]
+  python scripts/port/matrix.py --exe <opencloud> --input <script> --frame N [--scene NAME]
       [--data DIR] [--work DIR] [--jobs N] [--sizes WxH,...] [--reference WxH]
       [--letterbox-size WxH] [--skip-dpt] [--no-run] [--psnr-gate]
 

@@ -70,7 +70,7 @@ constexpr std::string_view kSessionLoggerName = "session";
 /** Name used for records that acknowledge a crash flush. */
 constexpr std::string_view kFlushLoggerName = "ct-log-flush";
 /** Prefix identifying session log files. */
-constexpr std::string_view kLogPrefix = "darkchronicle-";
+constexpr std::string_view kLogPrefix = "opencloud-";
 /** Suffix identifying session log files. */
 constexpr std::string_view kLogSuffix = ".log";
 // Past this the file only takes warnings and worse, so a runaway loop cannot fill the disk.

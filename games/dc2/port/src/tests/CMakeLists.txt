@@ -1,4 +1,4 @@
-# darkchronicle_tests links the whole port and game so a test can exercise a replacement unit against the
+# opencloud_tests links the whole port and game so a test can exercise a replacement unit against the
 # real game types. Each *_test.cpp holds GoogleTest cases; ctest runs one process per case, since the
 # game's state is global.
 include(FetchContent)
@@ -17,11 +17,11 @@ add_test(NAME PalettePaths.Check
         ${CMAKE_BINARY_DIR}/ps2_src ${CMAKE_SOURCE_DIR}/port/src)
 
 file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*_test.cpp)
-add_executable(darkchronicle_tests ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp ${TEST_SOURCES})
+add_executable(opencloud_tests ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp ${TEST_SOURCES})
 # Decoder fixtures remain available in tests without linking proprietary texture decoding into the game.
-target_sources(darkchronicle_tests PRIVATE ${OC_ROOT}/src/cpp/gfx/tim2.cpp)
-set_target_properties(darkchronicle_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-target_include_directories(darkchronicle_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_sources(opencloud_tests PRIVATE ${OC_ROOT}/src/cpp/gfx/tim2.cpp)
+set_target_properties(opencloud_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+target_include_directories(opencloud_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/config_parity_test.cpp
     PROPERTIES INCLUDE_DIRECTORIES "${CT_STB_IMAGE_INCLUDE_DIR}")
 set(LOCAL_LAYOUT_PROBES ${CMAKE_CURRENT_BINARY_DIR}/local_layout_probes.hpp)
@@ -31,11 +31,11 @@ add_custom_command(OUTPUT ${LOCAL_LAYOUT_PROBES}
     DEPENDS ${CMAKE_SOURCE_DIR}/scripts/port/local_layout_probes.py
         ${CMAKE_SOURCE_DIR}/ps2/src/character.cpp ${CMAKE_SOURCE_DIR}/ps2/src/menusys.cpp
     VERBATIM)
-target_sources(darkchronicle_tests PRIVATE ${LOCAL_LAYOUT_PROBES})
-target_include_directories(darkchronicle_tests PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-ct_link_game(darkchronicle_tests)
-oc_port_tests(darkchronicle_tests)
-target_link_libraries(darkchronicle_tests PRIVATE GTest::gtest nlohmann_json::nlohmann_json)
+target_sources(opencloud_tests PRIVATE ${LOCAL_LAYOUT_PROBES})
+target_include_directories(opencloud_tests PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+ct_link_game(opencloud_tests)
+oc_port_tests(opencloud_tests)
+target_link_libraries(opencloud_tests PRIVATE GTest::gtest nlohmann_json::nlohmann_json)
 
 # A case is a unit test: it finishes in milliseconds, and one that does not is cut off. The clock
 # cases measure short sleeps, which the parallel gfx cases skew, so they run on their own. The cases that compile
@@ -123,44 +123,44 @@ if(NOT gpu_label_result EQUAL 0)
 endif()
 # Listing the cases runs the binary's static initialisers, which can outlast CMake's 5 second default on a
 # loaded CI runner.
-gtest_discover_tests(darkchronicle_tests
+gtest_discover_tests(opencloud_tests
     DISCOVERY_MODE PRE_TEST
     DISCOVERY_TIMEOUT 60
     TEST_FILTER -PlatformClock.*:${CT_GPU_FILTER}:${CT_GPU_SLOW_FILTER}:${CT_CPU_FILTER}:${CT_CORPUS_FILTER}:${CT_CONFIG_PARITY_FILTER}
     PROPERTIES TIMEOUT ${CT_TEST_TIMEOUT})
-gtest_discover_tests(darkchronicle_tests
+gtest_discover_tests(opencloud_tests
     DISCOVERY_MODE PRE_TEST
     DISCOVERY_TIMEOUT 60
     TEST_FILTER PlatformClock.*
     PROPERTIES TIMEOUT ${CT_TEST_TIMEOUT} RUN_SERIAL TRUE)
-gtest_discover_tests(darkchronicle_tests
+gtest_discover_tests(opencloud_tests
     DISCOVERY_MODE PRE_TEST
     DISCOVERY_TIMEOUT 60
     TEST_FILTER ${CT_CORPUS_FILTER}
     PROPERTIES TIMEOUT ${CT_CORPUS_TIMEOUT} RUN_SERIAL TRUE LABELS "cpu;corpus")
-gtest_discover_tests(darkchronicle_tests
+gtest_discover_tests(opencloud_tests
     DISCOVERY_MODE PRE_TEST
     DISCOVERY_TIMEOUT 60
     TEST_FILTER ${CT_CONFIG_PARITY_FILTER}
     PROPERTIES TIMEOUT ${CT_CONFIG_PARITY_TIMEOUT} RUN_SERIAL TRUE LABELS "cpu;corpus")
-gtest_discover_tests(darkchronicle_tests
+gtest_discover_tests(opencloud_tests
     DISCOVERY_MODE PRE_TEST
     DISCOVERY_TIMEOUT 60
     TEST_FILTER ${CT_CPU_FILTER}
     PROPERTIES TIMEOUT ${CT_TEST_TIMEOUT} LABELS cpu)
 
-gtest_discover_tests(darkchronicle_tests
+gtest_discover_tests(opencloud_tests
     DISCOVERY_MODE PRE_TEST
     DISCOVERY_TIMEOUT 60
     TEST_FILTER ${CT_GPU_FILTER}-${CT_GPU_SLOW_FILTER}:${CT_CPU_FILTER}
     PROPERTIES TIMEOUT ${CT_TEST_TIMEOUT} LABELS gpu)
-gtest_discover_tests(darkchronicle_tests
+gtest_discover_tests(opencloud_tests
     DISCOVERY_MODE PRE_TEST
     DISCOVERY_TIMEOUT 60
     TEST_FILTER ${CT_GPU_SLOW_FILTER}-${CT_CPU_FILTER}
     PROPERTIES TIMEOUT ${CT_GPU_SLOW_TIMEOUT} LABELS gpu)
 
-add_dependencies(darkchronicle_tests darkchronicle)
+add_dependencies(opencloud_tests opencloud)
 # ctest reports a process that dies by abort() as failed even when PASS_REGULAR_EXPRESSION matches its
 # output, so the executable runs under a script that checks the run and the file it writes, and the regex
 # judges the script's verdict. Its shader compile loads the CPU, so it runs alone with the clock cases.
@@ -188,7 +188,7 @@ if(rc EQUAL 0 AND index_at GREATER -1 AND frame_at GREATER -1 AND sig STREQUAL "
 endif()
 ]=])
 add_test(NAME Smoke.HeadlessFramesScreenshot
-    COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:darkchronicle>
+    COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:opencloud>
         -DROOT=${CMAKE_BINARY_DIR}/smoke-fixture
         -DEMPTY_DATA_FIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/empty_data.cmake
         -DDATA_VERSION_SOURCE=${OC_ROOT}/data_version.json -P ${SMOKE_SCRIPT})

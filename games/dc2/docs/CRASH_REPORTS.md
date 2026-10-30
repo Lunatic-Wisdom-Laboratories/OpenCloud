@@ -13,7 +13,7 @@ On stderr, every crash prints its summary and the report's path:
 
 ```
 crash: EXCEPTION_ACCESS_VIOLATION writing 0x0000000000000010
-crash: report written to C:\Users\Max\AppData\Local\chronicletwo\saves\crashes\20261018-132124-6c54\report.txt
+crash: report written to C:\Users\Max\AppData\Local\opencloud\dc2\saves\crashes\20261018-132124-6c54\report.txt
 ```
 
 ## Where bundles go
@@ -22,14 +22,14 @@ Bundles go under the save root (see "Game data and first run" in [PC.md](PC.md))
 
 | Platform | Folder |
 |---|---|
-| Windows | `%LOCALAPPDATA%\chronicletwo\saves\crashes\<session>\` |
-| Linux | `$XDG_DATA_HOME/chronicletwo/saves/crashes/<session>/`, by default `~/.local/share/chronicletwo/saves/crashes/<session>/` |
-| macOS | `~/.local/share/chronicletwo/saves/crashes/<session>/` (or `$XDG_DATA_HOME` when set) |
-| Flatpak | `~/.var/app/org.themoonpeople.ChronicleTwo/data/chronicletwo/saves/crashes/<session>/` |
+| Windows | `%LOCALAPPDATA%\opencloud\dc2\saves\crashes\<session>\` |
+| Linux | `$XDG_DATA_HOME/opencloud/dc2/saves/crashes/<session>/`, by default `~/.local/share/opencloud/dc2/saves/crashes/<session>/` |
+| macOS | `~/.local/share/opencloud/dc2/saves/crashes/<session>/` (or `$XDG_DATA_HOME` when set) |
+| Flatpak | `~/.var/app/io.github.lunatic_wisdom_laboratories.OpenCloud/data/opencloud/dc2/saves/crashes/<session>/` |
 
 `--save`, `--run-dir` and `DC2_SAVE` move the save root, and the bundles with it. `run.sh` and `run.bat` put them in `port/run/saves/crashes/`. A crash before `config.json` is read (before step 3 of "Startup" in [PC.md](PC.md)) has no bundle; its whole report goes to stderr.
 
-The session id (`yyyymmdd-hhmmss-xxxx`) names the bundle, the session log (`logs/darkchronicle-<session>.log`, see [LOGGING.md](LOGGING.md)) and heads the report, so a report and a log always pair up.
+The session id (`yyyymmdd-hhmmss-xxxx`) names the bundle, the session log (`logs/opencloud-<session>.log`, see [LOGGING.md](LOGGING.md)) and heads the report, so a report and a log always pair up.
 
 ## What a bundle holds
 
@@ -38,7 +38,7 @@ crashes/
   last_crash.json          the newest bundle, for the next launch's notice
   20261018-132124-6c54/
     report.txt             what happened, where, and the game's state
-    darkchronicle.log      the session log up to the crash
+    opencloud.log      the session log up to the crash
     config.json            config.json with personal paths replaced
 ```
 
@@ -61,7 +61,7 @@ A report that ends without `== end ==` stopped early; a line starting `!!` says 
 Excerpt from `--crash-test segv:early` on Windows (Debug):
 
 ```
-Dark Chronicle crash report
+OpenCloud crash report
 kind:       crash
 session:    20261018-132124-6c54
 build id:   9DCFEE250C89C1BA4C4C44205044422E1
@@ -75,8 +75,8 @@ EXCEPTION_ACCESS_VIOLATION writing 0x0000000000000010
 thread: 47620 (main)
 
 == raw frames ==
-#0  darkchronicle.exe+0xe75c7
-#1  darkchronicle.exe+0xe7568
+#0  opencloud.exe+0xe75c7
+#1  opencloud.exe+0xe7568
 ...
 
 == stack trace ==
@@ -86,9 +86,9 @@ thread: 47620 (main)
 #3  (anonymous namespace)::Run(int, char const**) at port/src/main.cpp:316
 ```
 
-### darkchronicle.log
+### opencloud.log
 
-A copy of `logs/darkchronicle-<session>.log`, made after a flush of at most 2 seconds. It is copied rather than moved, because the logger still holds the file open. When the crash is on the logging thread itself there is no flush, and the copy holds what had reached the file. With `DC2_LOG_FILE=0` or `log.file` off there is no log to copy.
+A copy of `logs/opencloud-<session>.log`, made after a flush of at most 2 seconds. It is copied rather than moved, because the logger still holds the file open. When the crash is on the logging thread itself there is no flush, and the copy holds what had reached the file. With `DC2_LOG_FILE=0` or `log.file` off there is no log to copy.
 
 ### config.json
 

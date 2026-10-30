@@ -192,8 +192,8 @@ if (-not $source -and (Test-Path -LiteralPath $dataArchive -PathType Leaf)) {
 Push-Location $checkout
 # Script runs log at debug to the console (docs/LOGGING.md); a DC2_LOG of the user's own still wins.
 if (-not $env:DC2_LOG) { $env:DC2_LOG = 'debug' }
-Write-Stage 'starting darkchronicle'
-& (Join-Path $build 'darkchronicle.exe') --run-dir (Join-Path $checkout 'port/run') @rest
+Write-Stage 'starting opencloud'
+& (Join-Path $build 'opencloud.exe') --run-dir (Join-Path $checkout 'port/run') @rest
 $code = $LASTEXITCODE
 Pop-Location
 $dataShared.Dispose()

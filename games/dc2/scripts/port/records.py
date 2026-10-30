@@ -208,13 +208,13 @@ def unqualified(name):
 
 def check_ps2_only_functions(build):
     """Failures for the PS2-only readers' functions, or None when the build has nothing to check them against."""
-    darkchronicle = os.path.join(build, "darkchronicle")
+    opencloud = os.path.join(build, "opencloud")
     overrides_path = os.path.join(build, "port_overrides.txt")
-    if not (os.path.isfile(darkchronicle) and os.path.isfile(overrides_path)):
+    if not (os.path.isfile(opencloud) and os.path.isfile(overrides_path)):
         return None
     replaced = {unqualified(signature) for signature in truncations.load_overrides(build)}
     try:
-        linked = {unqualified(name) for name in truncations.linked_functions(darkchronicle)}
+        linked = {unqualified(name) for name in truncations.linked_functions(opencloud)}
     except SystemExit as error:
         return [str(error)]
     failures = []
@@ -425,7 +425,7 @@ def run(options, root):
         truncations.set_mirrors(build)
         reader_failures = check_ps2_only_functions(build)
         if reader_failures is None:
-            notes.append("PS2-only reader functions skipped: %s has no darkchronicle or port_overrides.txt" % build)
+            notes.append("PS2-only reader functions skipped: %s has no opencloud or port_overrides.txt" % build)
         else:
             failures += reader_failures
     else:

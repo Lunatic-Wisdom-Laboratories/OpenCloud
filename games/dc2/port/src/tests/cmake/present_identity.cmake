@@ -3,7 +3,7 @@ if(NOT CMAKE_SCRIPT_MODE_FILE)
     return()
 endif()
 
-# Run with -DEXE=<darkchronicle> -DWORK=<scratch dir>. The canonical image must not depend on display renders.
+# Run with -DEXE=<opencloud> -DWORK=<scratch dir>. The canonical image must not depend on display renders.
 if(NOT DEFINED EXE OR NOT DEFINED WORK)
     message(FATAL_ERROR "present_identity.cmake needs -DEXE and -DWORK")
 endif()
@@ -22,7 +22,7 @@ function(run_headless name)
         RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err TIMEOUT 120)
     message("${out}${err}")
     if(NOT rc EQUAL 0)
-        message(FATAL_ERROR "${name}: darkchronicle exited with ${rc}")
+        message(FATAL_ERROR "${name}: opencloud exited with ${rc}")
     endif()
     if(NOT EXISTS "${png}")
         message(FATAL_ERROR "${name}: no screenshot at ${png}")

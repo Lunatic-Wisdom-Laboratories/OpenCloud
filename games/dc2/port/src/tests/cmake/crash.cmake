@@ -46,7 +46,7 @@ if(NOT EXISTS "${report}")
     message(FATAL_ERROR "no report.txt in ${bundles}\n${run}")
 endif()
 file(READ "${report}" text)
-foreach(section "Dark Chronicle crash report" "\n== exception ==\n" "\n== game state ==\n" "\nloop: " "\nlast asset: "
+foreach(section "OpenCloud crash report" "\n== exception ==\n" "\n== game state ==\n" "\nloop: " "\nlast asset: "
         "\n== raw frames ==\n#0 " "\n== stack trace ==\n" "\n== end ==\n")
     string(FIND "${text}" "${section}" at)
     if(at EQUAL -1)
@@ -66,7 +66,7 @@ endif()
 if(MODE STREQUAL "audio-thread" AND text MATCHES "thread: [0-9]+ [(]main[)]")
     message(FATAL_ERROR "the audio-thread fault was reported on the main thread\n${text}")
 endif()
-if(NOT EXISTS "${bundles}/darkchronicle.log")
+if(NOT EXISTS "${bundles}/opencloud.log")
     message(FATAL_ERROR "the session log was not copied into the bundle\n${text}")
 endif()
 if(NOT EXISTS "${ROOT}/config.json" OR EXISTS "${ROOT}/save/config.json" OR EXISTS "${ROOT}/save/logs")
@@ -96,14 +96,14 @@ foreach(case IN LISTS ct_crash_cases)
     list(POP_BACK fields frame)
     list(JOIN fields "|" exception)
     add_test(NAME Crash.${mode}
-        COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:darkchronicle> -DROOT=${CMAKE_BINARY_DIR}/crash-test/${mode}
+        COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:opencloud> -DROOT=${CMAKE_BINARY_DIR}/crash-test/${mode}
             -DMODE=${mode} -DSTATUS=${status} "-DEXCEPTION=${exception}" -DFRAME=${frame} -P ${crash_script})
     set_tests_properties(Crash.${mode} PROPERTIES PASS_REGULAR_EXPRESSION "CRASH_TEST_OK" TIMEOUT 90
         ENVIRONMENT "DC2_CRASH_TEST=;DC2_LOG_FILE=1")
 endforeach()
 
 add_test(NAME Crash.segv-frame
-    COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:darkchronicle> -DROOT=${CMAKE_BINARY_DIR}/crash-test/segv-frame
+    COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:opencloud> -DROOT=${CMAKE_BINARY_DIR}/crash-test/segv-frame
         -DMODE=segv -DSTATUS=signal "-DEXCEPTION=EXCEPTION_ACCESS_VIOLATION|SIGSEGV|SIGBUS" -DFRAME=CrashTestSegv
         -DFRAME_TEST=ON -DEMPTY_DATA_FIXTURE=${CMAKE_CURRENT_LIST_DIR}/empty_data.cmake
         -DDATA_VERSION_SOURCE=${OC_ROOT}/data_version.json -P ${crash_script})

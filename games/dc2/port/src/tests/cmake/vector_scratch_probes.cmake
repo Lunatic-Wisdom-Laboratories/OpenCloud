@@ -6,4 +6,4 @@ add_custom_command(OUTPUT ${VECTOR_SCRATCH_PROBES}
         ${CMAKE_SOURCE_DIR}/ps2/src/event_func.cpp ${CMAKE_SOURCE_DIR}/ps2/src/effscript.cpp
         ${CMAKE_SOURCE_DIR}/port/src/editexception.cpp
     VERBATIM)
-target_sources(darkchronicle_tests PRIVATE ${VECTOR_SCRATCH_PROBES})
+target_sources(opencloud_tests PRIVATE ${VECTOR_SCRATCH_PROBES})

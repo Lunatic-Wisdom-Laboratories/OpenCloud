@@ -21,7 +21,7 @@ def run_from_save(exe, data, fixture, script, frames, screenshot):
     if not (data / "manifest.txt").is_file():
         raise ValueError(f"data root has no manifest.txt: {data}")
     screenshot.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="darkchronicle-save-") as temp:
+    with tempfile.TemporaryDirectory(prefix="opencloud-save-") as temp:
         save = Path(temp) / "save"
         shutil.copytree(fixture, save)
         command = [str(exe), "--headless", "--offscreen", "--data", str(data),

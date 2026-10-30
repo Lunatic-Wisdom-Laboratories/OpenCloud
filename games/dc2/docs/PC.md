@@ -21,7 +21,7 @@ Without the container, `cmake --preset linux-x64`, `cmake --build --preset linux
 
 The renderer's cases need a Vulkan device with the features `../../engine/src/cpp/gfx/README.md` lists under "Device". The container's Mesa lavapipe provides them, so no GPU is needed there.
 
-`./run.sh linux-x64` builds, then runs `port/build/pc/darkchronicle` on a Linux host. It extracts the PAL source (`rom/pal/Dark Chronicle (PAL).iso`, else the first `.iso` in `rom/pal/` by name, else `rom/pal/extracted/iso`) into the ignored `port/run/` root with `dc2data`, under `.opencloud/locks/port-data.lock`. The game holds the lock shared while it runs. The launcher checks source metadata and the current extraction marker, skipping conversion when they match; `dc2data check` performs the full content audit.
+`./run.sh linux-x64` builds, then runs `port/build/pc/opencloud` on a Linux host. It extracts the PAL source (`rom/pal/Dark Chronicle (PAL).iso`, else the first `.iso` in `rom/pal/` by name, else `rom/pal/extracted/iso`) into the ignored `port/run/` root with `dc2data`, under `.opencloud/locks/port-data.lock`. The game holds the lock shared while it runs. The launcher checks source metadata and the current extraction marker, skipping conversion when they match; `dc2data check` performs the full content audit.
 
 ### Windows
 
@@ -48,7 +48,7 @@ ctest --test-dir port/build/windows-x64-tests --output-on-failure -j4
 
 Windows builds include the SDL, FFmpeg, C++/Rust runtime DLLs and the pinned redistributable Vulkan loader beside the executables. Acquisition includes the loader by default. CMake restores the runtime files on every build, including direct `cmake --build` calls; `cmake --install` also installs them. Running the built game requires no separate application runtime installation. A compatible graphics driver is still required.
 
-`tools/windows/package.ps1 -BuildDirectory port/build/windows-x64-tests -Destination chronicletwo-windows-x64.zip` packages CMake's explicit list of executables and runtime DLLs together with a gameplay-only `data.zip`. It audits each binary's imports and fails if a non-Windows dependency is missing. Packaging and installation exclude extracted disc assets, saves and disc images. First-run setup combines the shipped gameplay JSON with the user's disc data after launch.
+`tools/windows/package.ps1 -BuildDirectory port/build/windows-x64-tests -Destination opencloud-dc2-windows-x64.zip` packages CMake's explicit list of executables and runtime DLLs together with a gameplay-only `data.zip`. It audits each binary's imports and fails if a non-Windows dependency is missing. Packaging and installation exclude extracted disc assets, saves and disc images. First-run setup combines the shipped gameplay JSON with the user's disc data after launch.
 
 ### macOS
 
@@ -74,7 +74,7 @@ install the IPA through a sideloading tool that signs it for your device.
 For a local build, run `tools/ci/prebuilt-deps.sh ios-arm64`, install the Rust
 `aarch64-apple-ios` target, and configure `ios-arm64-release` with `SDL3_DIR`, `Vulkan_INCLUDE_DIR`
 and `Vulkan_LIBRARY` pointing to the iOS libraries. Build with
-`cmake --build port/build/ios-arm64-release --target darkchronicle`.
+`cmake --build port/build/ios-arm64-release --target opencloud`.
 
 The launcher extracts the player's ISO on the device, using at most two workers. Touch controls appear
 when no physical controller, keyboard or mouse is active. The launcher and in-game APP SETTINGS share
@@ -93,7 +93,7 @@ Release, RelWithDebInfo and MinSizeRel link the game with ThinLTO (`port/cmake/o
 
 ### Debug information
 
-Every configuration keeps DWARF line tables in `darkchronicle`, so crash reports name `file:line`: Release and MinSizeRel build with `-gline-tables-only`, and Debug and RelWithDebInfo keep `-g`. Linux and Windows links write a build id, and Mach-O has its `LC_UUID`. On macOS, non-Debug builds run `dsymutil` after the link, and `darkchronicle.dSYM` must travel with the binary. `-DCT_SYMBOLS=split` also writes `darkchronicle.pdb` (Windows) or `darkchronicle.debug` (Linux), and a Debug dSYM on macOS. `-DCT_SYMBOLS=off` adds nothing. [SYMBOLS.md](SYMBOLS.md) describes the symbol artifacts CI uploads and `tools/crash/symbolize.py`, which re-resolves a report's raw frames.
+Every configuration keeps DWARF line tables in `opencloud`, so crash reports name `file:line`: Release and MinSizeRel build with `-gline-tables-only`, and Debug and RelWithDebInfo keep `-g`. Linux and Windows links write a build id, and Mach-O has its `LC_UUID`. On macOS, non-Debug builds run `dsymutil` after the link, and `opencloud.dSYM` must travel with the binary. `-DCT_SYMBOLS=split` also writes `opencloud.pdb` (Windows) or `opencloud.debug` (Linux), and a Debug dSYM on macOS. `-DCT_SYMBOLS=off` adds nothing. [SYMBOLS.md](SYMBOLS.md) describes the symbol artifacts CI uploads and `tools/crash/symbolize.py`, which re-resolves a report's raw frames.
 
 ### The PS2 build
 
@@ -108,10 +108,10 @@ BUILD_DIR=build/pal python3 scripts/build/verify.py -c
 
 `.github/workflows/pc.yml` runs on pushes to `master` and on pull requests, in four jobs:
 
-- Linux (`ubuntu-26.04`): configures `linux-x64` with `-DCT_TEST_TIMEOUT=60` (lavapipe renders on the CPU), builds it in the OpenCloud container, checks that the clang Python bindings import, runs the full `ctest`, runs `scripts/port/native_gate.py` on the binary, and checks that `darkchronicle` is position-independent. It configures `CT_SYMBOLS=split`, runs the `tools/crash` tests, checks the build id and debuglink, and resolves a frame through `darkchronicle.debug`. Without the bindings, `Truncations.Check` and `Records.Check` skip, and a skip counts as a pass.
-- macOS (`macos-26`, Homebrew libraries): builds `macos-arm64` with `CT_SYMBOLS=split`, runs `ctest --preset macos-arm64`, and uploads the packaged binary and a `vulkaninfo` summary. It also resolves a frame through the dSYM and uploads `darkchronicle` with its dSYM as the symbol artifact. The pinned shared code carries the executable bit for `../../engine/scripts/build/oc-ffmpeg`.
+- Linux (`ubuntu-26.04`): configures `linux-x64` with `-DCT_TEST_TIMEOUT=60` (lavapipe renders on the CPU), builds it in the OpenCloud container, checks that the clang Python bindings import, runs the full `ctest`, runs `scripts/port/native_gate.py` on the binary, and checks that `opencloud` is position-independent. It configures `CT_SYMBOLS=split`, runs the `tools/crash` tests, checks the build id and debuglink, and resolves a frame through `opencloud.debug`. Without the bindings, `Truncations.Check` and `Records.Check` skip, and a skip counts as a pass.
+- macOS (`macos-26`, Homebrew libraries): builds `macos-arm64` with `CT_SYMBOLS=split`, runs `ctest --preset macos-arm64`, and uploads the packaged binary and a `vulkaninfo` summary. It also resolves a frame through the dSYM and uploads `opencloud` with its dSYM as the symbol artifact. The pinned shared code carries the executable bit for `../../engine/scripts/build/oc-ffmpeg`.
 - Windows (`windows-2025`): fetches the toolchain and the Vulkan runtime with `acquire.ps1 -VulkanLoader`, configures the test build with `configure.ps1 -Tests -VulkanLibrary`, builds it, runs `ctest -LE gpu`, and uploads the zipped build. It then resolves a frame at `wmain` with `symbolize.py` and uploads `package-symbols.ps1`'s symbol zip.
-- Flatpak (Flathub's `freedesktop-26.08` image): checks that `port/flatpak/cargo-sources.json` matches OpenCloud's `Cargo.lock`, builds `chronicletwo.flatpak` from the commit under test (`docs/FLATPAK.md`), uploads it and the packaged `darkchronicle` as the symbol artifact, and checks that the packaged `darkchronicle` reaches its data check.
+- Flatpak (Flathub's `freedesktop-26.08` image): checks that `port/flatpak/cargo-sources.json` matches OpenCloud's `Cargo.lock`, builds `opencloud.flatpak` from the commit under test (`docs/FLATPAK.md`), uploads it and the packaged `opencloud` as the symbol artifact, and checks that the packaged `opencloud` reaches its data check.
 
 Cases default to a 5-second timeout. Slow GPU cases use the larger of 30 seconds and `CT_TEST_TIMEOUT`, so the Linux job gives them 60 seconds. Cases that need a Vulkan device carry the CTest label `gpu`. The hosted Windows runner has no device, so its job excludes them with `-LE gpu`. `ctest -L gpu -N` lists them. Local runs run every case.
 
@@ -142,7 +142,7 @@ Each texture variant is a full-colour RGBA PNG. When retail animation scripts co
 
 To upgrade an existing extraction after updating `../../engine`:
 
-1. Reconfigure and rebuild, so `darkchronicle` and `dc2data` share the pinned data version. A build directory re-runs CMake when `../../engine/data_version.json` changes; `tools/windows/configure.ps1` also reconfigures it.
+1. Reconfigure and rebuild, so `opencloud` and `dc2data` share the pinned data version. A build directory re-runs CMake when `../../engine/data_version.json` changes; `tools/windows/configure.ps1` also reconfigures it.
 2. Extract again with `dc2data extract <iso-or-directory> <game-root>/data`, or start the game in a window and let setup re-extract when it rejects the older data version.
 
 Help movie extraction first appears in OpenCloud `2e6ef96` (data version 14). The fix did not bump the version, so if a version-14 extraction predates that commit, rerun `dc2data extract` explicitly; setup may already consider it current.
@@ -151,7 +151,7 @@ Never edit `data.json` to claim the new version: the marker would pass, but the 
 
 On iOS a launcher (`port/src/ios/Launcher.swift`; the iOS code is Swift under `port/src/ios`, calling the game through `ios/bridge.hpp` with Swift's C++ interoperability) comes up on every start, before the game's window. It shows whether the data is current and offers **Play** only then. Without data it finds a disc image (`.iso`) in the app's Documents folder or its Inbox, where the Files app and Open In put it, or lets the player choose one in Files, opened in place rather than copied; it then extracts into the data root on a worker thread and draws the progress. **Extract Again…** re-extracts over current data, saves and settings untouched. **Settings** lists the APP SETTINGS rows, apart from the bindings, and **Help** explains where the disc image goes, LiveContainer included. The on-screen gamepad starts after the launcher.
 
-`run.sh` and `run.bat` pass `--run-dir <checkout>/port/run`, giving them the data root `port/run/data`, whose parent holds `data.zip`, and `port/run/saves`. A direct executable launch defaults to the per-user `chronicletwo` application data root with the same layout. They also set `DC2_LOG=debug` when it is unset, so the console shows debug lines ([logging](LOGGING.md)).
+`run.sh` and `run.bat` pass `--run-dir <checkout>/port/run`, giving them the data root `port/run/data`, whose parent holds `data.zip`, and `port/run/saves`. A direct executable launch defaults to the per-user `opencloud/dc2` application data root with the same layout. They also set `DC2_LOG=debug` when it is unset, so the console shows debug lines ([logging](LOGGING.md)).
 
 The game reads its data through a read-only file system of mounts (`platform/vfs.hpp`). The base asset mount is `<game-root>/data.zip` when it exists; otherwise the unified `data/` directory is mounted, so directory fixtures and hand-edited data keep working. Gameplay documents live under `gameplay/` in either mount; directory fixtures supply their own documents. All names match ignoring ASCII case. The archive's central directory is read once at startup and its entries are read in place: Zstandard entries are decompressed on demand, and stored PNG and MP4 entries are copied from, or for movies streamed from, their offsets in the archive through FFmpeg custom I/O. Reads are thread-safe. Explicit `--run-dir DIR` selects a different root.
 
@@ -275,14 +275,14 @@ The data root is the first of these that applies:
 1. `--data DIR`
 2. `--run-dir DIR` plus `/data`
 3. `DC2_DATA`
-4. the per-user data directory: `%LOCALAPPDATA%\chronicletwo\data` on Windows, `$XDG_DATA_HOME/chronicletwo/data` or `~/.local/share/chronicletwo/data` elsewhere
+4. the per-user data directory: `%LOCALAPPDATA%\opencloud\dc2\data` on Windows, `$XDG_DATA_HOME/opencloud/dc2/data` or `~/.local/share/opencloud/dc2/data` elsewhere
 
 The save root is the first of these that applies. It is created when first resolved.
 
 1. `--save DIR`
 2. `--run-dir DIR` plus `/saves`
 3. `DC2_SAVE`
-4. the per-user save directory: `%LOCALAPPDATA%\chronicletwo\saves` on Windows, `$XDG_DATA_HOME/chronicletwo/saves` or `~/.local/share/chronicletwo/saves` elsewhere
+4. the per-user save directory: `%LOCALAPPDATA%\opencloud\dc2\saves` on Windows, `$XDG_DATA_HOME/opencloud/dc2/saves` or `~/.local/share/opencloud/dc2/saves` elsewhere
 
 A data root is missing when its parent has no current `data.json` marker, or has neither `data.zip` nor the unified `data/` directory. A windowed run opens OpenCloud's Rust setup window before creating the game window. The editable path accepts a disc image or a disc folder; **Choose image** and **Choose folder** open the operating system's file and folder pickers. A folder with no `DATA.DAT` and a single `.iso` file stands for that image. **Okay** starts extraction on a worker thread. The progress bar weights the ISO read, planning, concurrent asset categories, ZIP stream and final archive verification by planned work; model publication receives the largest share because it determines the conversion tail. The displayed ETA is withheld while critical model work makes no measurable progress, and 100% is reserved for successful publication. The setup window then closes automatically and normal game startup continues. Existing current data skips setup on subsequent launches. Extraction errors remain visible for correction and retry; closing setup before extraction exits with status 3. During extraction the window stays open until the worker finishes. Headless runs still print the `dc2data extract` command and exit with status 3.
 
@@ -361,7 +361,7 @@ The window icon uses the native `title/dc2_ic.gltf` model. Datapack
 models take priority, with malformed replacements falling back to the next
 valid candidate. The bundled two-moons icon remains available before extraction
 or when no model is valid; headless runs skip icon rendering. On Windows the
-native model also supplies `chronicletwo.ico` and the game shortcut.
+native model also supplies `opencloud.ico` and the game shortcut.
 
 #### Save file format
 
@@ -522,10 +522,10 @@ choice is blank and the ones after North lead one destination further than they
 say. The same file gives the three menus the English menu's lines, with East and
 West apart and the time gate named "Puerta del tiempo".
 
-### darkchronicle
+### opencloud
 
 ```
-darkchronicle [options]
+opencloud [options]
 ```
 
 | Option | Meaning |
@@ -575,7 +575,7 @@ A `PS2_UNIMPLEMENTED` stub aborts instead of exiting, so a debugger or a core du
 
 A game assertion (4), a renderer or window fatal error (1), an abort and a crash first write a crash bundle under `<save root>/crashes/` (see [CRASH_REPORTS.md](CRASH_REPORTS.md)); the status stays the same.
 
-The test `Smoke.HeadlessFramesScreenshot` (`port/src/tests/CMakeLists.txt`) runs `darkchronicle --headless --offscreen --frames 3 --screenshot` on a unified `data/` directory with a current parent `data.json`. It passes when the run exits 0, prints `dataread: indexed` and `mglib: frame 3 written to`, and writes a PNG. It is labelled `gpu`. It runs under a generated CMake script, because ctest counts a process killed by `abort()` as failed even when `PASS_REGULAR_EXPRESSION` matches its output; the script checks the exit status and the file.
+The test `Smoke.HeadlessFramesScreenshot` (`port/src/tests/CMakeLists.txt`) runs `opencloud --headless --offscreen --frames 3 --screenshot` on a unified `data/` directory with a current parent `data.json`. It passes when the run exits 0, prints `dataread: indexed` and `mglib: frame 3 written to`, and writes a PNG. It is labelled `gpu`. It runs under a generated CMake script, because ctest counts a process killed by `abort()` as failed even when `PASS_REGULAR_EXPRESSION` matches its output; the script checks the exit status and the file.
 
 ### Test hooks
 
@@ -611,13 +611,13 @@ items, and targets absent from the loaded map or event tables exit with status 2
   dungeon floor is built (`CAutoMapGen::SetupRoomInfo`), fixing the layout and
   the treasure and monster placement. Without it the seed is the retail stream.
 
-For example, `darkchronicle --jump dungeon:0:1 --fast-load --headless --offscreen
+For example, `opencloud --jump dungeon:0:1 --fast-load --headless --offscreen
 --input tools/input/jump-dungeon-floor1.input --frames 2300 --screenshot floor.png`
 reaches the first Underground Channel floor with movement and the HUD. See
 [Debug mode](DEBUG.md#jump-replays) for other rendered checkpoints and controls.
 
 `tools/input/perf-ocean-walk.input` is the Ocean's Roar performance replay: run
-`darkchronicle --jump dungeon:3:1 --fast-load --skip-events --invincible --seed 1234
+`opencloud --jump dungeon:3:1 --fast-load --skip-events --invincible --seed 1234
 --window 1920x1080 --input tools/input/perf-ocean-walk.input --frames 480 --log-fps`
 in a real window with `video.present_mode` `immediate`. Max walks into the open
 water and the camera pans across it, at about 3,000 scene draws a tick.
@@ -625,7 +625,7 @@ water and the camera pans across it, at about 3,000 scene draws a tick.
 To replay a milestone save without changing its source, use:
 
 ```sh
-python scripts/port/run_from_save.py --exe path/to/darkchronicle --data path/to/data \
+python scripts/port/run_from_save.py --exe path/to/opencloud --data path/to/data \
   --save-fixture path/to/fixture --input tools/input/pc-continue.input \
   --frames 5000 --screenshot loaded.png
 ```
@@ -646,7 +646,7 @@ Fixtures and extracted game data stay outside the repository.
 2. `ParseOptions` reads the other options. A usage error exits with status 2. `--input` loads its script here, and a bad script exits with status 2.
 2a. `LogInit` starts the logger with stderr only, at the level of `--log-level` or `DC2_LOG`, and routes OpenCloud's diagnostics into it. `LogShutdown` is registered with `atexit` before anything else that `main` registers, so it runs last. The session header goes to the log (see [LOGGING.md](LOGGING.md)).
 2b. `CrashInit` installs the crash handlers and starts the crash report writer; runs with `--headless`, `--frames` or `--input` never show a crash dialog (see [CRASH_REPORTS.md](CRASH_REPORTS.md)). `--crash-test` (or `DC2_CRASH_TEST`) is parsed here.
-3. `ConfigLoad` reads `config.json` from the save root's parent directory (see "config.json"). `LogAttachFile` then applies its `log` section and opens `<save root>/../logs/darkchronicle-<session>.log`, which starts with every line logged since `LogInit`. `CrashSetBundleRoot` then puts crash bundles under `<save root>/crashes/<session>/`, and an early `--crash-test` fires.
+3. `ConfigLoad` reads `config.json` from the save root's parent directory (see "config.json"). `LogAttachFile` then applies its `log` section and opens `<save root>/../logs/opencloud-<session>.log`, which starts with every line logged since `LogInit`. `CrashSetBundleRoot` then puts crash bundles under `<save root>/crashes/<session>/`, and an early `--crash-test` fires.
 4. `FirstRunRequireData` checks the data root and opens setup when extraction is needed, or exits with status 3 in headless mode; on iOS it shows the launcher every time (see "Game data and first run").
 4a. `InitCDFile` indexes the data root, printing `dataread: indexed N files under <dir>`. NTSC script validation runs before the window, renderer, audio and clock. Incompatible scripts are named in the log and startup exits with status 5; desktop runs also show an error dialog.
 5. The window opens, or the offscreen surface with `--headless`. A windowed run then shows the notice of a crash in an earlier session, if there is one not yet shown. Input initialises, and the input script is installed.
@@ -1915,7 +1915,7 @@ The root `CMakeLists.txt` selects the platform: `PS2` builds `ps2/`, and `PC` en
 - `../../engine` is the shared-code submodule. `../../engine/src/cpp` holds the code both games share: `gfx`, `audio`, `platform`, `sce` (the SDK replacements) and `tests`. `cmake/OpenCloudPort.cmake` gives the port its targets:
   - `oc_port_host_library(ct_host)` builds `gfx`, `audio` and `platform`.
   - `oc_port_sce_sources(... LIBS libvu0 libpad libmc sifdev sifrpc eekernel libcdvd libgraph libdma libpkt eekernel_threads libdev libmpeg libsdr modmsin sifdma)` selects the SDK families.
-  - `oc_port_tests(darkchronicle_tests)` adds the shared test cases.
+  - `oc_port_tests(opencloud_tests)` adds the shared test cases.
 - `tools/windows` holds the Windows scripts. `scripts/port/header_fixups.py` builds the header mirror (below). `scripts/build/verify.py` checks the PS2 build.
 
 ### The shared-code pin

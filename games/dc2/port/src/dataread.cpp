@@ -664,7 +664,7 @@ bool DataReadPrepareScriptTiming(bool headless) {
     CT_LOG_ERROR(Script, "script timing startup: NTSC timing unavailable; refusing startup");
     if (!headless) {
         message += "\nThe game cannot start with this script data. See the log for details.";
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Dark Chronicle - Script timing", message.c_str(), nullptr);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "OpenCloud - Script timing", message.c_str(), nullptr);
     }
     return false;
 }

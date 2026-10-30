@@ -83,7 +83,7 @@ Options g_options;
 
 [[noreturn]] void Usage(const char *program) {
     CT_LOG_ERROR(Main,
-                 "usage: {} [--data DIR] [--run-dir DIR] [--save DIR] [--window WxH] [--headless] [--offscreen]\n          [--frames N] [--screenshot PATH] [--input SCRIPT] [--display-per-tick N]\n          [--show-fps] [--log-fps] [--screenshot-display N] [--screenshot-fps]\n          [--log-level SPEC]\n  --jump MODE[:ARG]  start in town:<map>, georama:<0-4>, dungeon:<n>[:<floor>], event:<id>, title, opening, menu (DC2_JUMP)\n  --fast-load        shorten loading-screen holds (DC2_FAST_LOAD=1)\n  --give ITEM,...    give missing items and weapons on arrival (DC2_GIVE)\n  --skip-events      enter a jumped dungeon floor directly; skip skippable dungeon scenes (DC2_SKIP_EVENTS=1)\n  --invincible       the dungeon character takes no hits (DC2_INVINCIBLE=1)\n  --seed N           reseed the random generator with N as each dungeon floor is built (DC2_SEED)\n  --run-dir DIR      game root containing data.zip and saves/\n                     (default: the per-user chronicletwo app data directory)\n  --data DIR         override the extracted data/ subdirectory (DC2_DATA)\n  --save DIR         override the saves/ subdirectory (DC2_SAVE)\n  --headless         render offscreen (SDL offscreen driver, VK_EXT_headless_surface)\n  --offscreen        --headless without a Vulkan surface: render to an image only\n  --frames N         exit after frame N of the game's main loop (N a positive integer)\n  --screenshot PATH  with --frames: write the last frame to PATH as a PNG on exit\n  --screenshot-display N  with --screenshot: also write N interpolated display frames of that frame\n                     beside PATH, as PATH-display-K.png for K = 0..N-1\n  --screenshot-fps   with --screenshot: draw the FPS counter and menu pointer into the written image\n  --input SCRIPT     drive the pads from an input script; live input is ignored\n  --window WxH       window size in pixels (default: config.json, then the monitor's)\n  --display-per-tick N  headless: also render N interpolated display frames per tick (discarded)\n  --show-fps         draw the FPS counter on presented frames, headless too\n  --log-fps          print the FPS counter's text on stderr every second\n  --log-level SPEC   trace, debug, info, warning, error, critical or off, and/or CATEGORY=LEVEL,\n                     comma-separated (DC2_LOG; default: config.json's log.level)",
+                 "usage: {} [--data DIR] [--run-dir DIR] [--save DIR] [--window WxH] [--headless] [--offscreen]\n          [--frames N] [--screenshot PATH] [--input SCRIPT] [--display-per-tick N]\n          [--show-fps] [--log-fps] [--screenshot-display N] [--screenshot-fps]\n          [--log-level SPEC]\n  --jump MODE[:ARG]  start in town:<map>, georama:<0-4>, dungeon:<n>[:<floor>], event:<id>, title, opening, menu (DC2_JUMP)\n  --fast-load        shorten loading-screen holds (DC2_FAST_LOAD=1)\n  --give ITEM,...    give missing items and weapons on arrival (DC2_GIVE)\n  --skip-events      enter a jumped dungeon floor directly; skip skippable dungeon scenes (DC2_SKIP_EVENTS=1)\n  --invincible       the dungeon character takes no hits (DC2_INVINCIBLE=1)\n  --seed N           reseed the random generator with N as each dungeon floor is built (DC2_SEED)\n  --run-dir DIR      game root containing data.zip and saves/\n                     (default: the per-user opencloud/dc2 app data directory)\n  --data DIR         override the extracted data/ subdirectory (DC2_DATA)\n  --save DIR         override the saves/ subdirectory (DC2_SAVE)\n  --headless         render offscreen (SDL offscreen driver, VK_EXT_headless_surface)\n  --offscreen        --headless without a Vulkan surface: render to an image only\n  --frames N         exit after frame N of the game's main loop (N a positive integer)\n  --screenshot PATH  with --frames: write the last frame to PATH as a PNG on exit\n  --screenshot-display N  with --screenshot: also write N interpolated display frames of that frame\n                     beside PATH, as PATH-display-K.png for K = 0..N-1\n  --screenshot-fps   with --screenshot: draw the FPS counter and menu pointer into the written image\n  --input SCRIPT     drive the pads from an input script; live input is ignored\n  --window WxH       window size in pixels (default: config.json, then the monitor's)\n  --display-per-tick N  headless: also render N interpolated display frames per tick (discarded)\n  --show-fps         draw the FPS counter on presented frames, headless too\n  --log-fps          print the FPS counter's text on stderr every second\n  --log-level SPEC   trace, debug, info, warning, error, critical or off, and/or CATEGORY=LEVEL,\n                     comma-separated (DC2_LOG; default: config.json's log.level)",
                  program);
     LogFlush();
     std::exit(kExitUsage);
@@ -311,7 +311,7 @@ void LogSessionHeader() {
 #else
     constexpr std::string_view os = "Linux";
 #endif
-    CT_LOG_FILE_INFO("session {}: Dark Chronicle {} ({} build, {}), data version {}", LogSessionId(), commit, build,
+    CT_LOG_FILE_INFO("session {}: OpenCloud {} ({} build, {}), data version {}", LogSessionId(), commit, build,
                      os, OPENCLOUD_DATA_VERSION);
     CT_LOG_FILE_INFO("session: data {}, saves {}", Redacted(PathsDataRoot()), Redacted(PathsSaveRoot()));
 }
@@ -391,7 +391,7 @@ int Run(int argc, const char **argv) {
     InputScriptInstall(std::move(input_script));
 
     gfx::RendererConfig renderer;
-    renderer.app_name = "Dark Chronicle";
+    renderer.app_name = "OpenCloud";
     renderer.logical_width = kLogicalWidth;
     renderer.logical_height = kLogicalHeight;
     renderer.display_aspect = 4.0f / 3.0f;
@@ -467,12 +467,12 @@ static int IosMain(int argc, char **argv) {
         const std::string log = std::string(home) + "/Documents/stderr.log";
         if (std::freopen(log.c_str(), "w", stderr) != nullptr) {
             std::setvbuf(stderr, nullptr, _IONBF, 0);
-            std::fprintf(stderr, "darkchronicle: started\n");
+            std::fprintf(stderr, "opencloud: started\n");
         }
-        // iOS has no way to start the game with environment variables, so chronicletwo/env.txt in Documents
+        // iOS has no way to start the game with environment variables, so opencloud/dc2/env.txt in Documents
         // holds them, one KEY=VALUE a line: the DC2_ settings, or MoltenVK's MVK_CONFIG_ and Metal's MTL_ ones for
         // diagnosing the renderer. Each is set before SDL and the renderer start.
-        std::ifstream env(std::string(home) + "/Documents/chronicletwo/env.txt");
+        std::ifstream env(std::string(home) + "/Documents/opencloud/dc2/env.txt");
         for (std::string line; std::getline(env, line);) {
             if (!line.empty() && line.back() == '\r') {
                 line.pop_back();
@@ -484,7 +484,7 @@ static int IosMain(int argc, char **argv) {
             const std::string key = line.substr(0, equals);
             const std::string value = line.substr(equals + 1);
             setenv(key.c_str(), value.c_str(), 1);
-            std::fprintf(stderr, "darkchronicle: env %s=%s\n", key.c_str(), value.c_str());
+            std::fprintf(stderr, "opencloud: env %s=%s\n", key.c_str(), value.c_str());
         }
     }
     return Run(argc, const_cast<const char **>(argv));

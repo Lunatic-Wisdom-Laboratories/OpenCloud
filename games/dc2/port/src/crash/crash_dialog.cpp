@@ -208,7 +208,7 @@ namespace crash_detail {
 
 void ShowCrashDialog(std::string_view summary, std::string_view bundle_dir, std::string_view report_path) {
     DialogState state{
-        .text = L"Dark Chronicle has crashed.\r\n\r\n" + Wide(summary) +
+        .text = L"OpenCloud has crashed.\r\n\r\n" + Wide(summary) +
                 L"\r\n\r\nA crash report was saved to:\r\n" + Wide(bundle_dir) +
                 L"\r\n\r\nPlease include the files in this folder when you report the problem.",
         .bundle_dir = Wide(bundle_dir),
@@ -226,7 +226,7 @@ void ShowCrashDialog(std::string_view summary, std::string_view bundle_dir, std:
     dialog.Word(height);
     dialog.Word(0);
     dialog.Word(0);
-    dialog.String(L"Dark Chronicle");
+    dialog.String(L"OpenCloud");
     dialog.Word(9);
     dialog.String(L"Segoe UI");
     dialog.Item(SS_LEFT | SS_NOPREFIX, 10, 10, width - 20, height - 44, static_cast<WORD>(DialogControl::Text), kStaticClass, L"");
@@ -265,7 +265,7 @@ void CrashShowLastReportNotice() {
     if (bundle.empty()) {
         return;
     }
-    const std::string message = "Dark Chronicle crashed the last time it ran.\n\n" + summary +
+    const std::string message = "OpenCloud crashed the last time it ran.\n\n" + summary +
                                 "\n\nA crash report was saved to:\n" + bundle +
                                 "\n\nPlease include the files in this folder when you report the problem.";
 
@@ -277,7 +277,7 @@ void CrashShowLastReportNotice() {
     const SDL_MessageBoxData data{
         .flags = SDL_MESSAGEBOX_WARNING,
         .window = nullptr,
-        .title = "Dark Chronicle",
+        .title = "OpenCloud",
         .message = message.c_str(),
         .numbuttons = 3,
         .buttons = buttons,

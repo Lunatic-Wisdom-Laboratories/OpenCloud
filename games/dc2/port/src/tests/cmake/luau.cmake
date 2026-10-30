@@ -9,7 +9,7 @@ add_test(NAME Luau.Survey
 set_tests_properties(Luau.Survey PROPERTIES LABELS cpu SKIP_RETURN_CODE 77 TIMEOUT 600)
 
 # The runtime tests assemble a scripts directory from their modules and the shared vm library.
-target_compile_definitions(darkchronicle_tests PRIVATE
+target_compile_definitions(opencloud_tests PRIVATE
     CT_TEST_LUAU_DIR="${CMAKE_SOURCE_DIR}/port/src/tests/luau"
     CT_LUAU_SOURCE_DIR="${CMAKE_SOURCE_DIR}/port/src/luau")
 

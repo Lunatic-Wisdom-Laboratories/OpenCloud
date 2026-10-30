@@ -39,7 +39,7 @@ foreach(policy IN ITEMS Default LegacyPal)
         set(legacy_config ON)
     endif()
     add_test(NAME ScriptTimingStartup.HeadlessMismatchExitStatus${policy}
-        COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:darkchronicle>
+        COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:opencloud>
             -DROOT=${CMAKE_BINARY_DIR}/script-timing-reject-${policy}-fixture
             -DLEGACY_CONFIG=${legacy_config}
             -DEMPTY_DATA_FIXTURE=${CMAKE_CURRENT_LIST_DIR}/empty_data.cmake

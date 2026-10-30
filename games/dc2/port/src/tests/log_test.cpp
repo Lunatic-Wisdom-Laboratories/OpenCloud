@@ -280,9 +280,9 @@ protected:
 
 TEST_F(LogFiles, PruningKeepsTheNewestSessions) {
     for (int day = 10; day < 22; ++day) {
-        Touch(directory / std::format("darkchronicle-202601{}-120000-abcd.log", day));
+        Touch(directory / std::format("opencloud-202601{}-120000-abcd.log", day));
     }
-    const std::filesystem::path current = directory / "darkchronicle-20260101-000000-0000.log";
+    const std::filesystem::path current = directory / "opencloud-20260101-000000-0000.log";
     Touch(current);
     Touch(directory / "notes.txt");
     LogPruneDirectory(directory, 5, current);
@@ -292,11 +292,11 @@ TEST_F(LogFiles, PruningKeepsTheNewestSessions) {
         names.insert(entry.path().filename().string());
     }
     const std::set<std::string> expected = {
-        "darkchronicle-20260101-000000-0000.log",
-        "darkchronicle-20260118-120000-abcd.log",
-        "darkchronicle-20260119-120000-abcd.log",
-        "darkchronicle-20260120-120000-abcd.log",
-        "darkchronicle-20260121-120000-abcd.log",
+        "opencloud-20260101-000000-0000.log",
+        "opencloud-20260118-120000-abcd.log",
+        "opencloud-20260119-120000-abcd.log",
+        "opencloud-20260120-120000-abcd.log",
+        "opencloud-20260121-120000-abcd.log",
         "notes.txt",
     };
     EXPECT_EQ(names, expected);
@@ -309,7 +309,7 @@ TEST_F(LogFiles, SessionFileHasTimeLevelThreadAndCategory) {
     LogAttachFile(directory / "saves" / "", config);
     const std::filesystem::path path = LogFilePath();
     ASSERT_EQ(path.parent_path(), directory / "logs");
-    EXPECT_EQ(path.filename().string(), std::format("darkchronicle-{}.log", LogSessionId()));
+    EXPECT_EQ(path.filename().string(), std::format("opencloud-{}.log", LogSessionId()));
     CT_LOG_WARN(Save, "after the file {}", 2);
     LogFlush();
     LogApplyConfig(TestConfig());

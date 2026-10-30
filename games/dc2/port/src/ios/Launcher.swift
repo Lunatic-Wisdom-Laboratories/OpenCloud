@@ -194,10 +194,10 @@ private final class LauncherController: UIViewController, UIDocumentPickerDelega
         icon.widthAnchor.constraint(equalToConstant: 96).isActive = true
         icon.heightAnchor.constraint(equalToConstant: 96).isActive = true
         let title = LauncherController.label(34, .bold, .white)
-        title.text = "Dark Chronicle"
+        title.text = "OpenCloud"
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         let subtitle = LauncherController.label(15, .regular, .secondaryLabel)
-        subtitle.text = "Dark Cloud 2 on \(deviceName) · ChronicleTwo \(version)"
+        subtitle.text = "Dark Cloud 2 on \(deviceName) · OpenCloud \(version)"
         let notice = LauncherController.label(12, .regular, .tertiaryLabel)
         notice.text = "Needs your own copy of the game. No game data comes with this app."
         let left = UIStackView(arrangedSubviews: [icon, title, subtitle, notice])
@@ -317,7 +317,7 @@ private final class LauncherController: UIViewController, UIDocumentPickerDelega
             setStatus("opticaldisc", accent, "First, the game data",
                       "The game plays from the data of your own Dark Chronicle disc (PS2).\n"
                           + "1. Choose its disc image (.iso) in Files, or copy it into Files › On My \(deviceName) › "
-                          + "Dark Chronicle.\n"
+                          + "OpenCloud.\n"
                           + "2. Extract the game data, once. The disc image is not needed after.")
             setTitle(primary, "Choose Disc Image…", "folder")
             secondary.isHidden = true
@@ -443,15 +443,15 @@ private final class LauncherController: UIViewController, UIDocumentPickerDelega
 
     @objc private func showHelp() {
         present(alert("Getting started",
-                      "Dark Chronicle plays from the data of your own Dark Chronicle (PS2) disc.\n\n"
+                      "OpenCloud plays Dark Chronicle from the data of your own Dark Chronicle (PS2) disc.\n\n"
                           + "1. Make a disc image (.iso) of your disc.\n"
                           + "2. Put it on this \(deviceName): tap Choose Disc Image and pick it in Files, or copy it "
-                          + "into Files › On My \(deviceName) › Dark Chronicle.\n"
+                          + "into Files › On My \(deviceName) › OpenCloud.\n"
                           + "3. Tap Extract Game Data. It takes several minutes; keep the app open and the screen on.\n\n"
                           + "Under LiveContainer, copy the image into LiveContainer's folder: Data › Application › the "
                           + "game's folder › Documents, or use Choose Disc Image.\n\n"
-                          + "The settings are also in the game: Options, then SELECT. Logs are in Files › Dark "
-                          + "Chronicle › chronicletwo › logs."),
+                          + "The settings are also in the game: Options, then SELECT. Logs are in Files › "
+                          + "OpenCloud › opencloud › dc2 › logs."),
                 animated: true)
     }
 }

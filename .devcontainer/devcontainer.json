@@ -14,8 +14,8 @@
 		}
 	},
 	// The engine driver mounts the whole repository here; the game is at games/dc2.
-	"workspaceMount": "source=${localWorkspaceFolder},target=/work/chronicletwo,type=bind",
-	"workspaceFolder": "/work/chronicletwo/games/dc2",
+	"workspaceMount": "source=${localWorkspaceFolder},target=/work/opencloud,type=bind",
+	"workspaceFolder": "/work/opencloud/games/dc2",
 	"customizations": {
 		"vscode": {
 			"settings": {

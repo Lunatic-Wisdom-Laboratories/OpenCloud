@@ -8,8 +8,8 @@ Input format:
 - A raw frame is any line containing ``<module>+0x<hex offset>``, optionally preceded by a frame
   index such as ``#12``. Both of these are raw frames::
 
-      #03 darkchronicle.exe+0x1a2b3c
-        3  darkchronicle+0x1a2b3c
+      #03 opencloud.exe+0x1a2b3c
+        3  opencloud+0x1a2b3c
 
   ``<module>`` is the module's file name. A path is allowed; only its basename is used for lookup.
   The offset is relative to the module's load base, the address its headers are mapped at: a PE

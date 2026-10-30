@@ -70,7 +70,7 @@ orchestrator or reviewed by it before and after.
 ## 2. Where the port stands
 
 Phases 0-6 are done and Phase 7 (the sweep through the game) has started.
-`darkchronicle` builds with clang/lld, C++26, SDL3 and
+`opencloud` builds with clang/lld, C++26, SDL3 and
 Vulkan 1.4 on Linux (container) and Windows (llvm-mingw), indexes `data/`
 (8751 files), places the game's memory above 4 GiB, and runs the retail
 `MainLoop` on the shared renderer, mixer and movie decoder through the
@@ -173,7 +173,7 @@ tools/dc2data/            disc extraction: DATA.HD4+DATA.DAT, SOUND.HD3+SOUND.DA
   port/sce/stubs/         libdma, libpkt, libdev, libmpeg, libsdr, modmsin, sifdma, eekernel_threads, ...
   port/tests/             the host-side GoogleTest cases, built into each consumer's test executable
   cmake/OpenCloudPort.cmake oc_port_host_library, oc_port_sce_sources, oc_port_tests
-port/CMakeLists.txt       targets ct_options, ct_ps2, ct_host, ct_port, darkchronicle, darkchronicle_tests
+port/CMakeLists.txt       targets ct_options, ct_ps2, ct_host, ct_port, opencloud, opencloud_tests
 port/include/port.h       force-included ahead of every game unit
 port/include/stubs/<unit>.hpp   declarations and renames the stripped copy of ps2/src/<unit>.cpp needs
 port/src/main.cpp         PORT_OVERRIDE main: CLI, platform init, renderer, audio, then MainLoop()
@@ -181,7 +181,7 @@ port/src/runtime.cpp      __assert, exit__2, mwInit, fptosi/fptoui (Ps2Unimpleme
 port/src/platform/        game-specific host code only: config (schema), firstrun
 port/src/video/           PSS demux and MPEG-2 decoder, no game headers (candidate for OpenCloud later)
 port/src/<unit>.cpp       replacements for ps2/src/<unit>.cpp (mglib, mg_texture, mg_visual, dataread, movie, ...)
-port/src/tests/           darkchronicle_tests: game-side cases plus oc_port_tests
+port/src/tests/           opencloud_tests: game-side cases plus oc_port_tests
 docs/vu1/<program>.md     behavioural specs of the six VU1 programs (the source of truth for their replacements)
 scripts/port/             vu1dis.py (VU1 disassembler), truncations.py (pointer-cast audit)
 ```
@@ -195,7 +195,7 @@ a game header; they build as `ct_host` without `port.h`.
 ### 3.2 Build
 
 `port/CMakeLists.txt` is Chronicle's with the names changed (`dc_` to `ct_`,
-`darkcloud` to `darkchronicle`, no `REGION`, no `CREDITS`, no `lang/`, no
+`darkcloud` to `opencloud`, no `REGION`, no `CREDITS`, no `lang/`, no
 `glyphs/` until the options work needs them) and the host side taken from
 OpenCloud:
 
@@ -208,7 +208,7 @@ OpenCloud:
   selected `../../engine/src/cpp/sce` sources to add to the game-side target.
   Each file includes only its own SDK header, so a consumer selects only the
   families its `ps2/include/sce` has.
-- `oc_port_tests(darkchronicle_tests)` adds the host-side test cases.
+- `oc_port_tests(opencloud_tests)` adds the host-side test cases.
 
 The override pipeline is unchanged: `port_override.py list`, `strip` with
 `--define PORT` and `port/include/stubs/<unit>.hpp`, `check`, compile the
@@ -626,7 +626,7 @@ is `c67a87c1`; both games pin OpenCloud `0d72aa1`.
 
 ### Phase 1: compile, link, launch, abort loudly
 
-Goal: `darkchronicle` builds on Windows (llvm-mingw) and in the Linux
+Goal: `opencloud` builds on Windows (llvm-mingw) and in the Linux
 container with clang + SDL3 + C++26, opens a window through the shared
 platform layer, initialises the shared renderer (every pipeline built,
 cache written), enters `MainLoop()` and aborts at the first hardware
@@ -639,7 +639,7 @@ behaviour is implemented; nothing from Chronicle is copied.
   `ct_options`, `ct_ps2`, `ct_host` via `oc_port_host_library`, `ct_port`
   with `oc_port_sce_sources(LIBS libvu0 libpad libmc sifdev sifrpc eekernel
   eekernel_threads libcdvd libgraph libdma libpkt libdev libmpeg libsdr
-  modmsin sifdma)`, `ct_link_game`, `darkchronicle`, `CT_BUILD_TESTS`,
+  modmsin sifdma)`, `ct_link_game`, `opencloud`, `CT_BUILD_TESTS`,
   `PORT_DEFINITIONS PORT`; no CREDITS, lang, glyphs, icon, dcdata),
   `port/src/tests/CMakeLists.txt` (GoogleTest, `oc_port_tests`, one game
   `smoke` case), `.gitignore` additions (`port/build/`, `data/`, `save/`,
@@ -659,7 +659,7 @@ behaviour is implemented; nothing from Chronicle is copied.
 - Modify `opencloud.conf` (the six PC configs and aliases as Chronicle's;
   `OC_WINDOWS_HOST_SCRIPT=tools/windows/opencloud.ps1`, `OC_WINDOWS_CONFIGS`,
   `OC_CONTAINER_CONFIGS`; defaults stay `ps2-pal` until phase 7;
-  `OC_RUN_EXE=.../darkchronicle`; existing hooks gated on `ps2-*`). Create
+  `OC_RUN_EXE=.../opencloud`; existing hooks gated on `ps2-*`). Create
   `CMakePresets.json` (Chronicle's, display names only). Touch
   `build.sh`/`run.sh`/`*.bat` only where a comment names `ps2-pal` as the
   sole configuration.
@@ -672,7 +672,7 @@ behaviour is implemented; nothing from Chronicle is copied.
 **WP1.3 Windows host scripts [mechanical]**
 - Create `tools/windows/acquire.ps1`, `common.ps1`, `configure.ps1`,
   `configure-tests.ps1`, `build.ps1`, `opencloud.ps1` from Chronicle's with
-  `darkcloud` to `darkchronicle`, `DC_BUILD_TESTS` to `CT_BUILD_TESTS`,
+  `darkcloud` to `opencloud`, `DC_BUILD_TESTS` to `CT_BUILD_TESTS`,
   without the `dcdata` target (WP2.3 adds `dc2data`). These are build
   scripts, not port code, so a copy is right; a later OpenCloud WP may host
   them with the project name as a parameter (noted in Q9).
@@ -798,13 +798,13 @@ behaviour is implemented; nothing from Chronicle is copied.
 - Inputs: `ps2/src/main.cpp`, `Chronicle/port/src/main.cpp` (`Run`,
   `wmain`), `../../engine/include/gfx/gfx.hpp`, `platform/window.hpp`,
   `platform/paths.hpp`.
-- Acceptance: with WP1.10, `darkchronicle --headless` prints the pipeline
+- Acceptance: with WP1.10, `opencloud --headless` prints the pipeline
   progress, then the `PS2_UNIMPLEMENTED` line naming `sceDmaReset` (reached
   from `mgInit`) and exits non-zero; on Windows a window appears first.
 - Depends: 1.1, 1.4. Parallel-safe. Size: ~200.
 
 **WP1.10 Clang compile fixes and first link [mechanical, PS2 gate]**
-- Iterate `ninja -C port/build/pc darkchronicle`; for each error in a
+- Iterate `ninja -C port/build/pc opencloud`; for each error in a
   `ps2_src/` copy apply only Chronicle-sanctioned corrections in `ps2/`
   (split an initialisation a `switch` jumps over; `extern "C"`/`throw()`
   where linkage demands; `sizeof` for spelled-out sizes; SDK-true prototype
@@ -814,7 +814,7 @@ behaviour is implemented; nothing from Chronicle is copied.
   WP1.7's files (OpenCloud commit + re-pin); missing game names mean a stubs
   header is incomplete. `-Wno-*` on `ct_ps2` only for warnings Chronicle
   also disables.
-- Acceptance: `ninja -C port/build/pc darkchronicle` links on Linux;
+- Acceptance: `ninja -C port/build/pc opencloud` links on Linux;
   `.\build.bat windows-x64` links; `./build.sh ps2-pal` byte-identical;
   Chronicle green on any OpenCloud commit this WP produced; `git diff --stat
   ps2/` listed with justifications in the report.
@@ -825,7 +825,7 @@ behaviour is implemented; nothing from Chronicle is copied.
   mechanism, the shared-code layout and pin flow of 3.5, the stub list by
   file), `.github/workflows/pc.yml` (Linux container build + `ctest`,
   Windows with the acquire script, macOS), a `smoke` ctest running
-  `darkchronicle --headless --offscreen` expecting the abort exit code and
+  `opencloud --headless --offscreen` expecting the abort exit code and
   `sceDmaReset` on stderr.
 - Acceptance: `ctest --test-dir port/build/pc --output-on-failure` passes
   (host-side cases from `oc_port_tests` included, on lavapipe); CI green;
@@ -852,7 +852,7 @@ behaviour is implemented; nothing from Chronicle is copied.
     `sifdev.h` (SDK-true; `ps2-pal` still matches). Chronicle linux-x64
     ctest: 281/281.
 - WP1.1-1.4: `port/CMakeLists.txt` (`ct_options`, `ct_ps2`, `ct_host`,
-  `ct_port`, `ct_link_game`, `darkchronicle`, `darkchronicle_tests`),
+  `ct_port`, `ct_link_game`, `opencloud`, `opencloud_tests`),
   `opencloud.conf` with the six PC configurations, `CMakePresets.json`,
   `tools/windows/*.ps1`, `port/include/port.h`, `port/src/runtime.cpp`
   (`mwInit`, `__assert`, `exit__2`, `rand`/`srand`, `fptosi`/`fptoui`,
@@ -992,7 +992,7 @@ Parallel-safe. Size: ~700.
 cpp` overriding `MainLoop` with the retail sequence minus hardware: arena
 setup with `uintptr_t`, `SaveData.Initialize`, `GamePad__2.Init()`, then
 `mgInit` (still aborts), the per-frame loop with `ClockSyncV` for the debug
-pause spin. Acceptance: `darkchronicle --headless --data data` aborts in
+pause spin. Acceptance: `opencloud --headless --data data` aborts in
 `mgInit` after `InitCDFile` has indexed `data/` (log line); all phase 2
 tests pass; PS2 build matches. Depends: 2.1-2.8. Size: ~400.
 
@@ -1044,7 +1044,7 @@ and ChronicleTwo `master` both pin it.
 - Verified: linux-x64 ctest 338/338 (5 skipped: mouse capture and TTF font
   cases), including `DataRead.RealDataIndexesTheDiscFiles` and
   `Dc2Data.RealDisc*`; windows-x64 tests 345/345 (5 skipped); `ps2-pal`
-  matches; `darkchronicle --headless --offscreen --data data` logs
+  matches; `opencloud --headless --offscreen --data data` logs
   `dataread: indexed 8751 files under .../data` then
   `mgInit: PlayStation 2 code is not implemented on PC` on Linux (lavapipe)
   and Windows (RTX 4090); 74 functions call `Ps2Unimplemented` (34 game, 40
@@ -1217,7 +1217,7 @@ two-depth scene. Depends: 4.1-4.3. Size: ~900 (split outline+screeneffect
 `mgCFrame::Draw(u_int*)` and `mapsky.cpp`: run, override only what fails.
 Depends: 4.4. Size: ~300.
 
-**WP4.11 Phase gate [mechanical]** `darkchronicle --headless --frames 300
+**WP4.11 Phase gate [mechanical]** `opencloud --headless --frames 300
 --screenshot out.png --data data` reaches the title; `--input` reaches the
 opening and the first town; the `objdump`/`addr2line` check from
 Chronicle's `docs/PC.md` shows no `Ps2Unimplemented` caller in `mg*`,
@@ -1440,8 +1440,8 @@ Depends: 7.4.
 | Windows build | `.\build.bat windows-x64` |
 | macOS build | `./build.sh macos-arm64` with `VK_DRIVER_FILES` for MoltenVK when running |
 | Chronicle on every OpenCloud pin | `Chronicle: ./build.sh linux-x64 && ctest`, `./build.sh ps2-pal`, `ps2-ntsc`, `pc.yml` green, before ChronicleTwo pins the same commit |
-| Override integrity | `port_override.py check` in the build; `objdump -d darkchronicle \| grep -c Ps2Unimplemented` against the documented stub list |
-| Headless run | `darkchronicle --headless --frames N --screenshot out.png --data data` reaches the phase's target (1: `mgInit` abort after pipelines built; 2: the same after `InitCDFile` indexed 8751 files; 4: title screenshot; 6: movie screenshot; 7: town and dungeon by `--input`) |
+| Override integrity | `port_override.py check` in the build; `objdump -d opencloud \| grep -c Ps2Unimplemented` against the documented stub list |
+| Headless run | `opencloud --headless --frames N --screenshot out.png --data data` reaches the phase's target (1: `mgInit` abort after pipelines built; 2: the same after `InitCDFile` indexed 8751 files; 4: title screenshot; 6: movie screenshot; 7: town and dungeon by `--input`) |
 | Warnings | `port/src` and `../../engine/port` build `-Wall` clean; `ps2/` diffs listed with justifications |
 
 Tests are GoogleTest cases; host-side ones live in OpenCloud and run in both

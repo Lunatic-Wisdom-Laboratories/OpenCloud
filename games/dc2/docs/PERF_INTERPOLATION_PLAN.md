@@ -7,7 +7,7 @@ Ocean's Roar floor 1 drops to 62-140 presented FPS on an RTX 4090 when the camer
 Repro (about 20 seconds):
 
 ```sh
-darkchronicle --jump dungeon:3:1 --fast-load --skip-events --invincible --seed 1234 \
+opencloud --jump dungeon:3:1 --fast-load --skip-events --invincible --seed 1234 \
   --window 1920x1080 --input tools/input/perf-ocean-walk.input --frames 480 --log-fps
 ```
 
