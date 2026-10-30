@@ -37,8 +37,10 @@ public partial class LoaderSmokeTest : Node
         {
             string? output = args.FirstOrDefault(a => a.StartsWith("--out=", StringComparison.Ordinal))?["--out=".Length..];
             var text = new System.Text.StringBuilder();
+            var frameFilter = args.FirstOrDefault(a => a.StartsWith("--frames=", StringComparison.Ordinal))?["--frames=".Length..]
+                .Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
             foreach (var path in dumps)
-                DumpPack(vfs, path, text);
+                DumpPack(vfs, path, text, frameFilter);
             if (output != null)
                 System.IO.File.WriteAllText(output, text.ToString());
             else
@@ -156,7 +158,7 @@ public partial class LoaderSmokeTest : Node
     /// Raw numbers of a pack for checking placement against the game: its script, every MDS frame
     /// (parent, file matrix, vertex bounds) and every bind-pose matrix.
     /// </summary>
-    private static void DumpPack(VirtualFileSystem vfs, string path, System.Text.StringBuilder text)
+    private static void DumpPack(VirtualFileSystem vfs, string path, System.Text.StringBuilder text, HashSet<string>? frameFilter = null)
     {
         static string F(float v) => v.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
         static string M(System.Numerics.Matrix4x4 m) =>
@@ -193,6 +195,21 @@ public partial class LoaderSmokeTest : Node
                         text.Append($" verts {model.Positions.Length} min ({F(min.X)} {F(min.Y)} {F(min.Z)}) max ({F(max.X)} {F(max.Y)} {F(max.Z)}) v0 ({F(p0.X)} {F(p0.Y)} {F(p0.Z)} {F(p0.W)})");
                     }
                     text.AppendLine();
+                }
+            }
+            else if (extension == "mot" && frameFilter != null)
+            {
+                // Frame names come from the pack's MDS of the same base name.
+                var names = pack.TryRead(VfsPath.ChangeExtension(entry.Name, "mds")) is { } mdsData && MdsFile.LooksLikeMds(mdsData)
+                    ? MdsFile.Parse(mdsData).Objects.Select(o => o.BaseName).ToArray()
+                    : Array.Empty<string>();
+                foreach (var list in MotionFile.Parse(data))
+                {
+                    string name = list.Frame >= 0 && list.Frame < names.Length ? names[list.Frame] : "?";
+                    if (!frameFilter.Contains(name))
+                        continue;
+                    var shown = list.Keys.Where((k, i) => i < 3 || k.Frame is >= 360 and <= 366).Select(k => $"{k.Frame}:({F(k.Value.X)} {F(k.Value.Y)} {F(k.Value.Z)} {F(k.Value.W)})");
+                    text.AppendLine($"  {entry.Name} frame #{list.Frame} '{name}' target {list.Target} type {list.Type} keys {list.Keys.Length}: {string.Join(" ", shown)}");
                 }
             }
             else if (extension == "bbp")
