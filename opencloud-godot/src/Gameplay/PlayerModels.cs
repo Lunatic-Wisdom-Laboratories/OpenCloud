@@ -46,7 +46,10 @@ public static class PlayerModels
     /// the cap's peak points at Max's right; why the game shows it facing forward is not known
     /// yet, so the cap is turned by hand until it is.
     /// </summary>
-    public const float HatYawDegrees = 90.0f;
+    public const float HatYawDegrees = 80.0f;
+
+    /// <summary>How far the cap is pushed back from the frame, toward the back of the head.</summary>
+    public const float HatBackOffset = 2.0f;
 
     public static Equipment ForSlot(int slot) => slot == 1 ? Monica : Max;
 
@@ -119,7 +122,8 @@ public static class PlayerModels
                 {
                     // A turn about the character's up axis, written in the frame's space.
                     var basis = skeleton.GetBoneGlobalRest(bone).Basis.Orthonormalized();
-                    part.Transform = new Transform3D(basis.Inverse() * new Basis(Vector3.Up, Mathf.DegToRad(HatYawDegrees)) * basis, Vector3.Zero);
+                    part.Transform = new Transform3D(basis.Inverse() * new Basis(Vector3.Up, Mathf.DegToRad(HatYawDegrees)) * basis,
+                        basis.Inverse() * new Vector3(0, 0, -HatBackOffset));
                 }
                 // The part plays its own first motion, as the game steps a SetRef part: the
                 // hat's motion is what turns it the right way up on the frame.
