@@ -7,7 +7,7 @@ namespace OpenCloud.Core.IO;
 
 /// <summary>
 /// Single namespace over every mounted game data container. Later mounts take priority, so a
-/// datapack mounted after <c>data.zip</c> overrides its files (docs/PC.md datapacks). Paths can
+/// datapack mounted after <c>data.zip</c> overrides its files. Paths can
 /// reach into PACK archives: <c>chara/c01_base.chr/c01_base.mds</c> reads the member
 /// <c>c01_base.mds</c> of <c>chara/c01_base.chr</c>, at any nesting depth.
 /// </summary>
