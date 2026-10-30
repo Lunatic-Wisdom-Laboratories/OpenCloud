@@ -386,12 +386,15 @@ public partial class PlayerCharacter : CharacterBody3D
         return Mathf.Wrap(from + Mathf.Sign(gap) * step, -Mathf.Pi, Mathf.Pi);
     }
 
+    /// <summary>The rig's player; parts hung on its frames (the cap) keep their own.</summary>
     private static AnimationPlayer? FindAnimationPlayer(Node node)
     {
         if (node is AnimationPlayer player)
             return player;
         foreach (var child in node.GetChildren())
         {
+            if (child is BoneAttachment3D)
+                continue;
             if (FindAnimationPlayer(child) is { } found)
                 return found;
         }

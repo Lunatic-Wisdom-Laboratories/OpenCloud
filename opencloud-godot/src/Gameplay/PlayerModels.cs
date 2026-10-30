@@ -98,7 +98,7 @@ public static class PlayerModels
                 attachment.AddChild(part);
                 // The part plays its own first motion, as the game steps a SetRef part: the
                 // hat's motion is what turns it the right way up on the frame.
-                PlayFirstMotion(part);
+                notes.Add($"    part motion: {PlayFirstMotion(part) ?? "none"}");
                 notes.Add($"  {path}: on {frame}");
             }
             catch (Exception exception) when (exception is System.IO.InvalidDataException or ArgumentException)
@@ -109,8 +109,10 @@ public static class PlayerModels
         }
     }
 
-    private static void PlayFirstMotion(Node part)
+    /// <summary>Starts the part's first motion; returns its name, or null when it has none.</summary>
+    private static string? PlayFirstMotion(Node part)
     {
+        string? played = null;
         foreach (var player in FindAll<AnimationPlayer>(part))
         {
             var first = player.GetAnimationLibraryList()
@@ -122,9 +124,20 @@ public static class PlayerModels
                 .FirstOrDefault();
             if (first == null)
                 continue;
-            player.Play(first);
-            player.Seek(0, true);
+            // The model is built before it joins the scene, and a player outside the tree
+            // does not pose its skeleton, so the motion starts when the player enters it.
+            void Start()
+            {
+                player.Play(first);
+                player.Seek(0, true);
+            }
+            if (player.IsInsideTree())
+                Start();
+            else
+                player.Connect(Node.SignalName.TreeEntered, Callable.From(Start), (uint)GodotObject.ConnectFlags.OneShot);
+            played ??= first;
         }
+        return played;
     }
 
     private static IEnumerable<T> FindAll<T>(Node node) where T : Node
