@@ -123,7 +123,21 @@ public sealed class ModelLoader
         if (model != null && model.GetNodeOrNull(ModelMeta.SkeletonNodeName) == null)
             skeleton.Name = ModelMeta.SkeletonNodeName;
 
-        int FrameOfBone(string bone) => frames == null ? skeleton.FindBone(bone) : Array.FindIndex(frames, f => BoneNameMatches(f, bone));
+        // A mesh node under a frame's node comes back from the importer as a bone of its own
+        // ("Mesh", "Mesh_2"...) between the frame and the attachment: walk up to the frame.
+        int FrameOfBone(string bone)
+        {
+            if (frames == null)
+                return skeleton.FindBone(bone);
+            for (int b = skeleton.FindBone(bone); b >= 0; b = skeleton.GetBoneParent(b))
+            {
+                string name = skeleton.GetBoneName(b);
+                int frame = Array.FindIndex(frames, f => BoneNameMatches(f, name));
+                if (frame >= 0)
+                    return frame;
+            }
+            return -1;
+        }
 
         foreach (var mesh in FindAll<MeshInstance3D>(model ?? (Node)skeleton).Where(m => m.Skin != null).ToList())
         {
