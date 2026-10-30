@@ -162,7 +162,14 @@ public partial class ConverterMain : Node
         var pack = retail.TryOpenPack(path);
         if (pack == null)
         {
-            report.Fail(path, "not a PACK archive");
+            // A few packs on the disc hold a bare scene instead of a PACK.
+            var data = retail.ReadAllBytes(path);
+            if (MdsFile.LooksLikeMds(data))
+            {
+                ExportModel(models, output, report, path, models.Load(path), ModelDocument.KindModel);
+                return;
+            }
+            report.Fail(path, $"not a PACK archive ({data.Length} bytes, starts {Convert.ToHexString(data, 0, Math.Min(16, data.Length))})");
             return;
         }
         string name = VfsPath.GetFileName(path);
