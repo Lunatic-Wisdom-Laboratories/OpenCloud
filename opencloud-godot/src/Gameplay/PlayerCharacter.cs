@@ -153,6 +153,7 @@ public partial class PlayerCharacter : CharacterBody3D
         AddChild(model);
         _motion = new CharacterMotion(FindAnimationPlayer(model));
         _motion.SetMotion(Motions.Stand, MotionFlags.Restart);
+        _motion.Tick();
         model.GlobalTransform = GlobalTransform;
     }
 
@@ -218,6 +219,7 @@ public partial class PlayerCharacter : CharacterBody3D
             _motion.SetMotion(motion);
         if (!Mathf.IsEqualApprox(step, _motion.Step))
             _motion.SetStep(step);
+        _motion.Tick();
     }
 
     /// <summary>One game frame of <c>CharaControl</c>.</summary>
@@ -384,12 +386,15 @@ public partial class PlayerCharacter : CharacterBody3D
         return Mathf.Wrap(from + Mathf.Sign(gap) * step, -Mathf.Pi, Mathf.Pi);
     }
 
+    /// <summary>The rig's player; parts hung on its frames (the cap) keep their own.</summary>
     private static AnimationPlayer? FindAnimationPlayer(Node node)
     {
         if (node is AnimationPlayer player)
             return player;
         foreach (var child in node.GetChildren())
         {
+            if (child is BoneAttachment3D)
+                continue;
             if (FindAnimationPlayer(child) is { } found)
                 return found;
         }

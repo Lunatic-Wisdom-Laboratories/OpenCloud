@@ -140,9 +140,11 @@ sequences (`SEQ`), cloth.
 
 ## Walking in town
 
-`TownScene` loads a map and puts Max at its `CHARA_POS`, dressed as `SetupMainUnit` dresses him:
-his field rig `mainchr/c01_base2` (the town rig `chara/c01_base` keeps a placeholder where the
-shoes go, so it is only the fallback), clothes and shoes as costumes, the cap on the `hat` frame.
+`TownScene` loads a map and puts Max at its `CHARA_POS`, dressed as `SetupMainUnit` dresses him in
+town, but on his field rig `mainchr/c01_base2` (the town rig `chara/c01_base` is the fallback;
+the cap hangs upside down on its `hat` frame), clothes and shoes
+(`c01sh001`, else `c01sh002`) as costumes, the cap on the `hat` frame. The HUD lists what was
+loaded and any piece that was not found.
 
 WASD/arrows or the left stick move (Shift walks on the keyboard) · Q/E or L1/R1, J/L or the right
 stick turn the camera · I/K raise and lower it · C or L2 swings it behind Max · R back to the start ·

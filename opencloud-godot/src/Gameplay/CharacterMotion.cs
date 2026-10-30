@@ -41,6 +41,7 @@ public sealed class CharacterMotion
     private MotionFlags _requestedFlags;
     private float _step;
     private bool _held;
+    private (string Clip, bool Blend)? _pendingPlay;
 
     public CharacterMotion(AnimationPlayer? player)
     {
@@ -99,9 +100,25 @@ public sealed class CharacterMotion
     /// <summary>True when no motion plays or a held motion reached its last frame.</summary>
     public bool IsEnded => Current == null || _held;
 
-    /// <summary>Called once per game frame after the controller ran: stops held motions at their end.</summary>
+    /// <summary>
+    /// Called once per game frame after the controller ran, as the motion driver runs after the
+    /// controller: starts a requested motion with the step now set, and stops held motions at
+    /// their end.
+    /// </summary>
     public void Tick()
     {
+        if (_player != null && _pendingPlay is { } pending)
+        {
+            _pendingPlay = null;
+            // Blend weight goes from 0.1 by 0.2 a game frame: fully in after 4.5 frames. Godot
+            // runs a cross-fade in animation time (scaled by SpeedScale), so the fade is given
+            // in that time; a motion at step 0.02 would otherwise take 50 times longer to fade in.
+            double frames = (1.0f - BlendStart) / BlendSpeed;
+            double blend = pending.Blend ? frames * Math.Max(_step, 0.01f) / ModelMeta.FramesPerSecond : 0.0;
+            _player.Play(pending.Clip, blend);
+            _player.Seek(0, true);
+            ApplySpeed();
+        }
         if (_player == null || Current == null || (CurrentFlags & MotionFlags.Hold) == 0 || _held)
             return;
         double next = _player.CurrentAnimationPosition + _step / ModelMeta.FramesPerSecond;
@@ -125,12 +142,7 @@ public sealed class CharacterMotion
         CurrentFlags = _requestedFlags;
         if (change || restart)
         {
-            string clip = _clips[_requested];
-            // Blend weight goes from 0.1 by 0.2 a game frame: fully in after 4.5 frames.
-            double blend = Current == null ? 0.0 : (1.0f - BlendStart) / BlendSpeed / ModelMeta.FramesPerSecond;
-            _player.Play(clip, blend);
-            if (restart || change)
-                _player.Seek(0, true);
+            _pendingPlay = (_clips[_requested], Current != null);
             Current = _requested;
             _held = false;
             if (change)
