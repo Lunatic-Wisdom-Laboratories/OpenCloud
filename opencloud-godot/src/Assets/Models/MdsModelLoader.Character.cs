@@ -66,6 +66,7 @@ public sealed partial class MdsModelLoader
 
         var root = new Node3D { Name = SafeNodeName(name) };
         var model = BuildScene(mds, info.Model, textures, skinning);
+        model.Transform = ObjectTransform(info.Position, info.Rotation);
         root.AddChild(model);
 
         // What a costume (LoadSkin) needs from this character: its deform frames and base matrices.
@@ -103,6 +104,18 @@ public sealed partial class MdsModelLoader
             }
         }
         return root;
+    }
+
+    /// <summary>
+    /// The object's position and rotation as the frame's <c>GetLocalMatrix</c> applies them on top
+    /// of the root frame: X, then Y, then Z rotation (<c>sceVu0RotMatrixX/Y/Z</c>), then the position.
+    /// </summary>
+    public static Transform3D ObjectTransform(System.Numerics.Vector3? position, System.Numerics.Vector3? rotation)
+    {
+        var r = rotation ?? System.Numerics.Vector3.Zero;
+        var basis = new Basis(Vector3.Back, r.Z) * new Basis(Vector3.Up, r.Y) * new Basis(Vector3.Right, r.X);
+        var p = position ?? System.Numerics.Vector3.Zero;
+        return new Transform3D(basis, new Vector3(p.X, p.Y, p.Z));
     }
 
     private List<MotionKeyList>? ReadKeyLists(PackArchive pack, string? file, string packName)

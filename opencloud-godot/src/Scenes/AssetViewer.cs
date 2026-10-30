@@ -454,7 +454,8 @@ public partial class AssetViewer : Node3D
             attachment.AddChild(part);
             _status += $"\n{path}: on {bone}";
             if (_loader.Mds.LastReport.Character is { } partInfo)
-                _status += $"\n  part info.cfg: {partInfo.Motions.Count} motion slots, keys {string.Join(" ", partInfo.Motions.Values.SelectMany(m => m.Keys).Select(k => k.Name))}";
+                _status += $"\n  part info.cfg: {partInfo.Motions.Count} motion slots, position {partInfo.Position?.ToString() ?? "-"}, rotation {partInfo.Rotation?.ToString() ?? "-"}" +
+                           $"\n  part commands: {string.Join(" ", partInfo.Commands.Select(c => c.Tag + (c.Args.Count > 0 ? "(" + string.Join(",", c.Args.Select(a => a.AsString ?? a.AsFloat.ToString("0.###"))) + ")" : string.Empty)))}";
             _status += PlayPartMotion(part);
 
             // Diagnostics for placement: the bone's rest and bind (bbp) matrices, and the part's root rest.

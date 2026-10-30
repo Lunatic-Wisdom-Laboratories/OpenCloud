@@ -65,6 +65,15 @@ public sealed class CharacterInfo
 
     public SortedDictionary<int, MotionSet> Motions { get; } = new();
 
+    /// <summary><c>POSITION x, y, z</c>: the character's initial position (<c>SetPosition</c>).</summary>
+    public System.Numerics.Vector3? Position { get; private set; }
+
+    /// <summary>
+    /// <c>ROTATION x, y, z</c> in radians: the character's initial rotation (<c>SetRotation</c>),
+    /// turned onto its root frame on every draw. An equipped part keeps it under its bone.
+    /// </summary>
+    public System.Numerics.Vector3? Rotation { get; private set; }
+
     public static CharacterInfo Parse(ReadOnlySpan<byte> data)
     {
         var commands = GameScript.Parse(data, Tags);
@@ -108,6 +117,12 @@ public sealed class CharacterInfo
                         WeightFile = NonEmpty(command.Arg(3).AsString),
                     };
                     break;
+                case "POSITION":
+                    info.Position = Vector(command);
+                    break;
+                case "ROTATION":
+                    info.Rotation = Vector(command);
+                    break;
                 case "KEY_START":
                     inKeys = true;
                     if (info.Motions.TryGetValue(motionId, out var restarted))
@@ -129,6 +144,9 @@ public sealed class CharacterInfo
         }
         return info;
     }
+
+    private static System.Numerics.Vector3 Vector(ScriptCommand command) =>
+        new(command.Arg(0).AsFloat, command.Arg(1).AsFloat, command.Arg(2).AsFloat);
 
     private static string? NonEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
 }
