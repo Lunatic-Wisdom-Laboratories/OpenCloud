@@ -41,7 +41,10 @@ reach into PACK archives: `chara/c01_base.chr/c01_base.mds`.
 | `src/Assets/Models` | MDS/MDT parsers, `MdsModelLoader` (→ `Skeleton3D` + `MeshInstance3D` + `Skin`), character packs (`info.cfg`, `.wgt` weights, `.bbp` bind poses, `.mot` motions → `AnimationPlayer`), `GltfModelLoader` for `data.zip` |
 | `src/Assets/Maps` | Map scripts (`MapInfo`, `MapLayout`), PCP model lists, sky packs, `MapLoader` (→ placed parts, collision bodies, sky) |
 | `src/Rendering` | Material factory, free camera, `MapLightingRig` (map lighting sets → environment and lights) |
-| `src/Scenes` | `AssetViewer` (main scene), `MapViewer` and `LoaderSmokeTest` (headless check) |
+| `src/Game/Items` | `ItemCatalog`: the common item table (`menu/cfg7/comdat.cfg`), item types and families |
+| `src/Game/Save` | `GlobalSaveState` (shared world state), `SaveOperation`, `Inventory`, `PlayerLocalState`, `PlayerRoster` |
+| `src/Net` | `NetworkManager` (ENet co-op session) and `SaveSync` (host-authoritative save replication) |
+| `src/Scenes` | `AssetViewer` (main scene), `MapViewer`, `LoaderSmokeTest` and `NetSyncSmokeTest` (headless checks) |
 | `tools` | `make_test_data.py`: synthetic sample data, no game content |
 
 ## Asset viewer
@@ -133,6 +136,38 @@ godot --headless --path . res://src/Scenes/LoaderSmokeTest.tscn -- --data=/tmp/o
     --model=chara/c01_base.gltf
 godot --headless --path . res://src/Scenes/LoaderSmokeTest.tscn -- --data=/tmp/oc-test/retail --map=t01
 ```
+
+## Co-op save state
+
+The save record is split by owner:
+
+- `GlobalSaveState` is what every player shares: story flags (0x800 bits) and counters (0x80),
+  per-map flags (256 maps x 128 bits), clock and story progress, Georama part counts, money
+  (0..999999), medals (0..999), the shared 150-place item board (138 or 144 places plus
+  overflow, with the stacking, owned-limit and unique-item rules) and the status and equipment
+  of Max and Monica.
+- `PlayerLocalState` is one player's: peer id, slot, controlled character (slot 0 Max, slot 1
+  Monica), map and position, and their own options. `PlayerRoster` holds one per player.
+
+Every change to the shared state is a `SaveOperation` (`AddMoney`, `AddItem`, `RemoveItem`,
+`SetBitFlag`, `SetMapFlag`...) applied with `GlobalSaveState.Apply`, which is deterministic.
+`NetworkManager` (ENet, port 7777, two players by default):
+
+- the host applies operations, numbers them and replays them to every peer on reliable channel 1;
+  a client's `Submit` goes to the host, which validates it, and the client's state changes when
+  the host's copy comes back;
+- every 5 s the host sends its revision and a SHA-256-based digest; a client that differs, or
+  misses a revision, asks for a full snapshot;
+- joining checks the protocol version and the item table fingerprint (both players need the
+  same game data), sends the roster and a snapshot, and raises `PlayerJoined(peerId, slot,
+  character)` on every peer (`PlayerLeft` when they go).
+
+```sh
+godot --headless --path . res://src/Scenes/NetSyncSmokeTest.tscn   # no game data needed
+```
+
+The check runs a host and a client in one process over localhost: inventory rules, sync from
+both sides, a deliberately broken client copy repaired by the digest check, and leaving.
 
 ## Format references
 
