@@ -6,8 +6,7 @@ using System.IO.Compression;
 namespace OpenCloud.Core.IO;
 
 /// <summary>
-/// Reader for the extractor's <c>data.zip</c> and for datapacks:
-/// a single-disk ZIP, classic or ZIP64, whose entries are stored (method 0), Zstandard
+/// Reader for a <c>data.zip</c> of converted game data and for datapacks: a single-disk ZIP, classic or ZIP64, whose entries are stored (method 0), Zstandard
 /// compressed (method 93) or, for hand-made datapacks, deflated (method 8). Every read checks
 /// the entry's CRC-32.
 /// </summary>

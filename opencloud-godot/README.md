@@ -1,7 +1,8 @@
 # opencloud-godot
 
 Native reimplementation of the Dark Cloud 2 (Dark Chronicle) engine in Godot 4 (.NET 8 / C#).
-The repository holds code only: the engine reads the user's own game data at run time.
+The repository holds code only. The engine reads only converted, open-format data: run
+[`opencloud-converter`](../opencloud-converter/README.md) once on your own disc first.
 
 ## Requirements
 
@@ -17,43 +18,49 @@ godot --path . res://src/Scenes/TownScene.tscn -- --data=/path/to/data --map=s01
 
 ## Game data
 
-Point the engine at any of these with `-- --data=<path>` (repeatable; later paths override
-earlier ones), the `OPENCLOUD_DATA` environment variable, or `data/paths` in
-`user://opencloud.cfg` (the viewer saves working command-line paths there):
+Point the engine at the converter's output with `-- --data=<path>` (repeatable; later paths
+override earlier ones, so a datapack mounted last replaces files), the `OPENCLOUD_DATA`
+environment variable, or `data/paths` in `user://opencloud.cfg` (the viewer saves working
+command-line paths there):
 
 | Source | What is read |
 | --- | --- |
-| Disc image (`.iso`) | ISO 9660 files, plus the files packed in its `DATA.HD4`/`DATA.DAT` |
-| `DATA.HD4` (with `DATA.DAT` beside it) | The retail file index |
-| `data.zip` | The extractor's archive: ZIP64, Zstandard (method 93) and stored entries, CRC-checked |
-| A folder | Loose files; a folder that holds `data.zip`, `DATA.HD4` or an `.iso` mounts those too |
+| A converted folder | Loose files (holds the converter's `opencloud-data.json`); a `data.zip` inside it mounts too |
+| `data.zip` | A converted folder packed as ZIP (deflate, or ZIP64 with Zstandard method 93 / stored entries), CRC-checked |
 
-Paths are case-insensitive, accept `\` and device prefixes (`cdrom0:\CHARA\C01_BASE.CHR;1`), and can
-reach into PACK archives: `chara/c01_base.chr/c01_base.mds`.
+A disc image, `DATA.HD4` or a folder holding them is refused with a message pointing to the
+converter. Paths are case-insensitive and accept `\`.
+
+What the engine reads (see the converter's README for the full description):
+
+| File | Format |
+| --- | --- |
+| `*.glb` + `*.model.json` | glTF 2.0 binary models; the companion holds what glTF cannot: bone frame names, deform frames, bind matrices, the game names and `KEY` steps of the animations, hidden nodes |
+| `*.textures.json` + `*.png` | The pictures of one texture file with their game names and clamp/alpha flags |
+| `*.map.json`, `list.json`, `sky.json` | Map information and layout, model lists, sky packs |
+| `menu/cfg7/comdat.items.json` | The common item table |
 
 ## Layout
 
 | Folder | Contents |
 | --- | --- |
 | `src/Core` | Binary helpers, Shift-JIS names, data path discovery |
-| `src/Core/Scripts` | `GameScript`: the CFG script reader (text and `BIN` encodings) |
-| `src/Core/IO` | `VirtualFileSystem` and its sources: directory, ZIP, ISO, `DATA.HD4`/`DATA.DAT`, PACK |
-| `src/Assets/Textures` | TIM2 decoder, IMG/IM2/IM3 archives, `TextureLoader` (→ `ImageTexture`), `TextureLibrary` |
-| `src/Assets/Models` | MDS/MDT parsers, `MdsModelLoader` (→ `Skeleton3D` + `MeshInstance3D` + `Skin`), character packs (`info.cfg`, `.wgt` weights, `.bbp` bind poses, `.mot` motions → `AnimationPlayer`), `GltfModelLoader` for `data.zip` |
-| `src/Assets/Maps` | Map scripts (`MapInfo`, `MapLayout`), PCP model lists, sky packs, `MapLoader` (→ placed parts, collision bodies, sky) |
+| `src/Core/IO` | `VirtualFileSystem` and its sources: directory and ZIP |
+| `src/Assets/Textures` | `TextureDocument` (PNG + JSON → `ImageTexture`), `TextureLibrary` |
+| `src/Assets/Models` | `ModelLoader` (GLB + `.model.json` → `Skeleton3D`, `Skin`, `AnimationPlayer` with libraries `m<slot>`), costumes (`ApplySkin`), `ModelDocument`, `ModelMeta` |
+| `src/Assets/Maps` | `MapDocument` (map information, layout, model lists, sky), `MapLoader` (→ placed parts, collision bodies, sky) |
 | `src/Rendering` | Material factory, free camera, `MapLightingRig` (map lighting sets → environment and lights) |
-| `src/Game/Items` | `ItemCatalog`: the common item table (`menu/cfg7/comdat.cfg`), item types and families |
+| `src/Game/Items` | `ItemCatalog`: the common item table (`menu/cfg7/comdat.items.json`), item types and families |
 | `src/Game/Save` | `GlobalSaveState` (shared world state), `SaveOperation`, `Inventory`, `PlayerLocalState`, `PlayerRoster` |
 | `src/Net` | `NetworkManager` (ENet co-op session) and `SaveSync` (host-authoritative save replication) |
 | `src/Gameplay` | `PlayerCharacter` (town controller), `CharacterMotion` (motions by game name), `TownCamera`, `PadInput`, `PlayerModels` (dressed player rigs), `PlayerSync` (30 Hz network sync) |
 | `src/Scenes` | `AssetViewer` (main scene), `MapViewer`, `TownScene`, `LoaderSmokeTest` and `NetSyncSmokeTest` (headless checks) |
-| `tools` | `make_test_data.py`: synthetic sample data, no game content |
+| `tools` | `make_test_data.py`: synthetic original-format sample data for the converter, no game content; `pack_data.py`: packs a converted folder into a ZIP64/Zstandard `data.zip` |
 
 ## Asset viewer
 
-Loads Max (`chara/c01_base.chr`, or the converted `chara/c01_base.gltf`; his outfit
-`mainchr/c01fuku1` is added when present) and browses every `.chr`, `.mds`, `.pcp`, `.gltf`
-and `.glb` in the mounted data.
+Loads Max (`mainchr/c01_base2.glb`, else `chara/c01_base.glb`; his outfit `mainchr/c01fuku1.glb`
+is added when present) and browses every `.glb` and `.gltf` in the mounted data.
 
 PgDn/PgUp browse · Home Max · F frame · B bone markers · R reload · F1 help ·
 right mouse look · WASD move · Q/E down/up · Shift fast · wheel speed.
@@ -65,9 +72,8 @@ animated model wherever bone names match.
 
 ## Map viewer
 
-Lists every `map/**/*.map` of the mounted data (the retail `.iso`, `DATA.HD4` or an extracted
-folder) and shows the chosen one with its lighting, sky and time of day. Start on a map with
-`-- --map=<name or path>` (`s01` is `map/s/s01/s01.map`, as `GetMapPath` builds it), or press Tab
+Lists every converted map (`map/**/*.map.json`) of the mounted data and shows the chosen one with its lighting, sky and time of day. Start on a map with
+`-- --map=<name or path>` (`s01` is `map/s/s01/s01.map.json`, as `GetMapPath` builds it), or press Tab
 in the asset viewer.
 
 PgDn/PgUp or click the list: map · F frame · R reload · C collision · P function points ·
@@ -76,7 +82,9 @@ F1 help. The camera is the asset viewer's.
 
 ## Maps
 
-A map is loaded as `CScene::LoadMap` does, from the files sharing its stem:
+The converter reads a map as `CScene::LoadMap` does, from the original files sharing its stem,
+and writes `<stem>.map.json` with its models and textures beside it; the engine builds it from
+that:
 
 - `.map`: one script read twice. The map information tags (`IMG`, `PCP`, `LIGHT_SET` blocks with
   `BGCOLOR`, `AMBIENT`, `LIGHT`, `FOG`..., `TIME_FLAG`, `SKY_INFO`) say which textures and model
@@ -104,7 +112,8 @@ between time lighting sets, sun and moon, LOD and far clipping.
 
 ## Characters, skinning and motion
 
-A character pack (`.chr`) is read the way the game reads it, through its `info.cfg`:
+The converter reads a character pack (`.chr`) the way the game reads it, through its `info.cfg`,
+and writes it as one GLB with its `.model.json`:
 
 - `MODEL` names the MDS scene. Every MDS object is a bone of one `Skeleton3D`.
 - The frames named by `VERTEX_ANIME` are skinned with `<model>.wgt` (up to 32 bones per model,
@@ -118,11 +127,12 @@ A character pack (`.chr`) is read the way the game reads it, through its `info.c
 - Keys are evaluated as `MotionProc` does (shorter-arc slerp with its snap thresholds, lerp,
   scale after rotation); bones with scale keys are resampled at every key and decomposed.
 
-Costumes are put on the way `LoadSkin` does it (`MdsModelLoader.ApplySkin`): the costume pack's
-`info.cfg` is read with the skin tags (`MODEL`, `MOTION slot, ?, "x.bbp", "x.wgt"`), its visuals on
+Costumes are put on the way `LoadSkin` does it (`ModelLoader.ApplySkin`): the converter reads the
+costume pack's `info.cfg` with the skin tags (`MODEL`, `MOTION slot, ?, "x.bbp", "x.wgt"`) and
+writes it skinned to its own frames (kind `costume`); the engine re-skins its visuals on
 the character's deform frames are skinned to the character's skeleton with bones matched by name,
 and each costume frame replaces what the character's frame of the same name drew (Max's rig
-placeholder triangles). The viewer dresses Max in `mainchr/c01fuku1.chr` this way.
+placeholder triangles). The viewer dresses Max in `mainchr/c01fuku1.glb` this way.
 
 Not yet: vertex/shape motion
 (`SHAPE_ANIME`, key types 12/20/21), material, visibility and camera keys, motion blending,
@@ -132,7 +142,7 @@ sequences (`SEQ`), cloth.
 
 `TownScene` loads a map and puts Max at its `CHARA_POS`, dressed as `SetupMainUnit` dresses him:
 his field rig `mainchr/c01_base2` (the town rig `chara/c01_base` keeps a placeholder where the
-shoes go, so it is only the fallback), clothes and shoes as costumes, the cap on the `hat` frame. Models go through `GameModelLoader`, so converted glTF files are picked up too.
+shoes go, so it is only the fallback), clothes and shoes as costumes, the cap on the `hat` frame.
 
 WASD/arrows or the left stick move (Shift walks on the keyboard) · Q/E or L1/R1, J/L or the right
 stick turn the camera · I/K raise and lower it · C or L2 swings it behind Max · R back to the start ·
@@ -179,13 +189,15 @@ prints every player's position after that long and quits.
 
 ```sh
 python3 tools/make_test_data.py /tmp/oc-test
-godot --headless --path . res://src/Scenes/LoaderSmokeTest.tscn -- --data=/tmp/oc-test/retail \
-    --model=chara/c01_base.chr --model=chara/c99_binary.chr --texture=menu/sample.tm2
-godot --headless --path . res://src/Scenes/LoaderSmokeTest.tscn -- --data=/tmp/oc-test/converted/data.zip \
-    --model=chara/c01_base.gltf
-godot --headless --path . res://src/Scenes/LoaderSmokeTest.tscn -- --data=/tmp/oc-test/retail --map=t01
-godot --headless --path . res://src/Scenes/TownScene.tscn -- --data=/tmp/oc-test/retail --map=t01 --selftest=60
+godot --headless --path ../opencloud-converter -- --source=/tmp/oc-test/retail --out=/tmp/oc-test/out --zip=/tmp/oc-test/data.zip
+godot --headless --path . res://src/Scenes/LoaderSmokeTest.tscn -- --data=/tmp/oc-test/out \
+    --model=chara/c01_base.glb --model=chara/c99_binary.glb --skin=mainchr/c01fuku1.glb \
+    --texture=menu/sample.textures.json --map=t01 --items
+godot --headless --path . res://src/Scenes/LoaderSmokeTest.tscn -- --data=/tmp/oc-test/data.zip --map=t01
+godot --headless --path . res://src/Scenes/TownScene.tscn -- --data=/tmp/oc-test/out --map=t01 --selftest=60
 ```
+
+Pointing the smoke test at `/tmp/oc-test/retail` must fail: the engine refuses original data.
 
 The town self-test holds the stick forward for 60 game frames and fails unless Max moved and
 stands on the synthetic map's floor.

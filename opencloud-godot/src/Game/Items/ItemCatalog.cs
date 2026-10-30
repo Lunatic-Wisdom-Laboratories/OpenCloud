@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Linq;
+using System.Text.Json.Nodes;
 using OpenCloud.Core.IO;
-using OpenCloud.Core.Scripts;
+using static OpenCloud.Core.JsonValues;
 
 namespace OpenCloud.Game.Items;
 
@@ -99,20 +101,15 @@ public sealed record ItemRecord(
 /// The common item table: per item number its type, how many fit in one inventory place
 /// (<see cref="ItemRecord.StackNum"/>) and how many can be owned (<see cref="ItemRecord.MaxNum"/>).
 /// The retail game builds it from <c>menu/cfg7/comdat.cfg</c> (<c>CGameData::LoadData</c>,
-/// <c>_DATACOM</c>). Every peer of a co-op session needs the same table, because inventory
+/// <c>_DATACOM</c>); the converter writes it as <c>menu/cfg7/comdat.items.json</c>. Every peer of
+/// a co-op session needs the same table, because inventory
 /// operations are replayed on each of them; <see cref="Fingerprint"/> lets peers compare tables.
 /// </summary>
-public sealed class ItemCatalog
+public sealed partial class ItemCatalog
 {
-    public const string CommonDataPath = "menu/cfg7/comdat.cfg";
-
-    /// <summary>Tag table of <c>gamedata_tag</c>, for binary scripts.</summary>
-    public static readonly string[] Tags =
-    {
-        "COMINIT", "COM", "WEPNUM", "WEP", "WEP_ST", "WEP_ST_L", "WEP_ST2", "WEP_ST2_L", "WEP_SPE",
-        "WEP_BUILD", "ITEMINIT", "ITEM", "AT_INIT", "AT_ST", "AT_ST2", "AT_ST_SP", "ROBOINIT",
-        "RB_PARTS", "GRDNUM", "GRD", "FISHINIT", "FISH", "MES_SYS", "MES_SYSSPE",
-    };
+    public const string Format = "opencloud.items";
+    public const int Version = 1;
+    public const string DocumentPath = "menu/cfg7/comdat.items.json";
 
     private readonly Dictionary<int, ItemRecord> _records = new();
 
@@ -137,29 +134,48 @@ public sealed class ItemCatalog
 
     public static ItemCatalog Load(VirtualFileSystem vfs)
     {
-        var data = vfs.TryRead(CommonDataPath) ?? throw new System.IO.FileNotFoundException("item table not found", CommonDataPath);
-        return Parse(data);
+        var data = vfs.TryRead(DocumentPath) ?? throw new System.IO.FileNotFoundException("item table not found", DocumentPath);
+        return FromJson(Parse(data, DocumentPath), DocumentPath);
     }
 
-    public static ItemCatalog Parse(ReadOnlySpan<byte> script)
+    public JsonObject ToJson()
     {
-        var catalog = new ItemCatalog();
-        foreach (var command in GameScript.Parse(script, Tags))
+        var json = Header(Format, Version);
+        json["items"] = new JsonArray(_records.Values.OrderBy(r => r.ItemNo).Select(r => (JsonNode?)new JsonObject
         {
-            if (command.Tag != "COM")
-                continue;
+            ["no"] = r.ItemNo,
+            ["type"] = (int)r.Type,
+            ["list_no"] = r.ListNo,
+            ["active_set"] = r.ActiveSet,
+            ["stack"] = r.StackNum,
+            ["max"] = r.MaxNum,
+            ["icon_texture"] = r.IconTextureNo,
+            ["icon"] = r.IconNo,
+            ["message"] = r.MessageNo,
+            ["file"] = r.FileName,
+            ["attribute"] = (uint)r.Attribute,
+        }).ToArray());
+        return json;
+    }
+
+    public static ItemCatalog FromJson(JsonObject json, string path)
+    {
+        CheckFormat(json, Format, Version, path);
+        var catalog = new ItemCatalog();
+        foreach (var item in Objects(json, "items"))
+        {
             catalog.Add(new ItemRecord(
-                ItemNo: command.Arg(0).AsInt,
-                Type: (ItemDataType)command.Arg(1).AsInt,
-                ListNo: command.Arg(2).AsInt,
-                ActiveSet: command.Arg(3).AsInt != 0,
-                StackNum: command.Arg(4).AsInt,
-                MaxNum: (ushort)command.Arg(5).AsInt,
-                IconTextureNo: command.Arg(6).AsInt,
-                IconNo: command.Arg(7).AsInt,
-                MessageNo: command.Arg(8).AsInt,
-                FileName: command.Arg(9).AsString ?? string.Empty,
-                Attribute: (ItemAttribute)(uint)command.Arg(10).AsInt));
+                ItemNo: Int(item, "no"),
+                Type: (ItemDataType)Int(item, "type"),
+                ListNo: Int(item, "list_no"),
+                ActiveSet: Bool(item, "active_set"),
+                StackNum: Int(item, "stack"),
+                MaxNum: Int(item, "max"),
+                IconTextureNo: Int(item, "icon_texture"),
+                IconNo: Int(item, "icon"),
+                MessageNo: Int(item, "message"),
+                FileName: Str(item, "file") ?? string.Empty,
+                Attribute: (ItemAttribute)(uint)Int(item, "attribute")));
         }
         return catalog;
     }

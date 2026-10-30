@@ -5,22 +5,6 @@ using OpenCloud.Core.Scripts;
 
 namespace OpenCloud.Assets.Maps;
 
-/// <summary>What a model-list entry is loaded as (<c>CMdsInfo::type</c>).</summary>
-public enum MapModelType
-{
-    Model = 0,
-    Collision = 1,
-    CameraCollision = 3,
-    Character = 4,
-}
-
-/// <summary>One <c>MDS ... MDS_END</c> entry of a model list.</summary>
-public sealed record MapModelEntry(string Name, MapModelType Type, float FarDistance, int FarFade)
-{
-    /// <summary>Bit 0 of the type: collision models are never drawn (<c>CMapPiece::DrawSub</c>).</summary>
-    public bool IsDrawn => ((int)Type & 1) == 0;
-}
-
 /// <summary>
 /// A PCP model list (<c>CMdsList::LoadPCPFile</c>): a PACK of MDS models and character packs
 /// whose <c>info.cfg</c> names each model and says what it is. Map pieces find their model by
@@ -90,7 +74,7 @@ public sealed class MapModelList
                 case "MDS_END" when current != null:
                     // pcpMDS_END fails, leaving the slot without a frame, when the pack lacks the file.
                     if (pack.Contains(current))
-                        list.Entries.Add(new MapModelEntry(current, type, farDistance, farFade));
+                        list.Entries.Add(new MapModelEntry(current, type, farDistance, farFade, string.Empty));
                     current = null;
                     break;
             }

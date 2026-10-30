@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using OpenCloud.Assets.Models;
-using OpenCloud.Core.IO;
+using OpenCloud.Core;
 
 namespace OpenCloud.Gameplay;
 
@@ -11,8 +11,7 @@ namespace OpenCloud.Gameplay;
 /// Builds a player's model the way <c>SetupMainUnit</c> does in town: the character's town rig
 /// (<c>chara/c01_base</c> for Max), dressed with the equipped clothes and footwear through the
 /// costume loader (<c>LoadSkin</c>), and the headwear hung on the rig's <c>hat</c> frame.
-/// Everything goes through <see cref="GameModelLoader"/>, so converted glTF models are used
-/// when the data holds them instead of the retail packs.
+/// Everything is loaded from the converted models through <see cref="ModelLoader"/>.
 /// </summary>
 public static class PlayerModels
 {
@@ -22,25 +21,25 @@ public static class PlayerModels
     /// <summary>
     /// Max: the field rig first, whose deform frames the equipment files are made for (the
     /// town rig <c>chara/c01_base</c> keeps a placeholder where the shoes go), then the town
-    /// rig, each retail or converted. Clothes then footwear, as <c>SetupMainUnit</c> puts them on.
+    /// rig. Clothes then footwear, as <c>SetupMainUnit</c> puts them on.
     /// </summary>
     public static readonly Equipment Max = new(
         "max",
-        new[] { "mainchr/c01_base2.chr", "mainchr/c01_base2.gltf", "chara/c01_base.chr", "chara/c01_base.gltf" },
-        new[] { "mainchr/c01fuku1.chr", "mainchr/c01sh001.chr" },
-        "mainchr/c01ha001.chr");
+        new[] { "mainchr/c01_base2.glb", "chara/c01_base.glb" },
+        new[] { "mainchr/c01fuku1.glb", "mainchr/c01sh001.glb" },
+        "mainchr/c01ha001.glb");
 
     /// <summary>Monica's town rig; her equipment files are not wired up yet.</summary>
     public static readonly Equipment Monica = new(
         "monica",
-        new[] { "chara/c02_base.chr", "chara/c02_base.gltf", "mainchr/c02_base2.chr", "mainchr/c02_base2.gltf" },
+        new[] { "chara/c02_base.glb", "mainchr/c02_base2.glb" },
         Array.Empty<string>(),
         null);
 
     public static Equipment ForSlot(int slot) => slot == 1 ? Monica : Max;
 
     /// <summary>Loads and dresses the model, or returns null with the reason in <paramref name="notes"/>.</summary>
-    public static Node3D? Load(GameModelLoader loader, Equipment equipment, List<string> notes)
+    public static Node3D? Load(ModelLoader loader, Equipment equipment, List<string> notes)
     {
         string? path = loader.FindFirst(equipment.Rigs);
         if (path == null)
@@ -51,14 +50,14 @@ public static class PlayerModels
 
         var root = loader.Load(path);
         notes.Add($"{equipment.Rig}: {path}");
-        var rig = FindAll<Node3D>(root).FirstOrDefault(n => n.HasMeta(MdsModelLoader.DeformFramesMeta));
+        var rig = FindAll<Node3D>(root).FirstOrDefault(n => n.HasMeta(ModelMeta.DeformFrames));
         if (rig != null)
         {
             foreach (var skin in equipment.Skins.Where(s => loader.FindFirst(new[] { s }) != null))
             {
                 try
                 {
-                    notes.Add($"  {skin}: {loader.Mds.ApplySkin(rig, skin)} frames");
+                    notes.Add($"  {skin}: {loader.ApplySkin(rig, skin)} frames");
                 }
                 catch (Exception exception) when (exception is System.IO.InvalidDataException or ArgumentException)
                 {
@@ -72,17 +71,17 @@ public static class PlayerModels
     }
 
     /// <summary><c>SetRef</c>: hangs a part on a named frame of the character's skeleton.</summary>
-    private static void AttachToFrame(GameModelLoader loader, Node3D root, string path, string frame, List<string> notes)
+    private static void AttachToFrame(ModelLoader loader, Node3D root, string path, string frame, List<string> notes)
     {
         foreach (var skeleton in FindAll<Skeleton3D>(root))
         {
             int bone = Enumerable.Range(0, skeleton.GetBoneCount())
-                .FirstOrDefault(i => MdsObject.StripAttributes(skeleton.GetBoneName(i)) == frame, -1);
+                .FirstOrDefault(i => NodeNames.StripAttributes(skeleton.GetBoneName(i)) == frame, -1);
             if (bone < 0)
                 continue;
             try
             {
-                var attachment = new BoneAttachment3D { Name = MdsModelLoader.SafeNodeName("ref_" + frame) };
+                var attachment = new BoneAttachment3D { Name = NodeNames.Safe("ref_" + frame) };
                 skeleton.AddChild(attachment);
                 attachment.BoneName = skeleton.GetBoneName(bone);
                 var part = loader.Load(path);

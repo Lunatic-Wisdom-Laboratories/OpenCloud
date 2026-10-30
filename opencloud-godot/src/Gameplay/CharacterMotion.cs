@@ -56,7 +56,7 @@ public sealed class CharacterMotion
             var animations = player.GetAnimationLibrary(library);
             var clips = animations.GetAnimationList()
                 .Select(clip => (Name: clip.ToString(), Animation: animations.GetAnimation(clip)))
-                .OrderBy(c => c.Animation.HasMeta(MdsModelLoader.KeyIndexMeta) ? (int)c.Animation.GetMeta(MdsModelLoader.KeyIndexMeta) : int.MaxValue);
+                .OrderBy(c => c.Animation.HasMeta(ModelMeta.KeyIndex) ? (int)c.Animation.GetMeta(ModelMeta.KeyIndex) : int.MaxValue);
             foreach (var (clip, animation) in clips)
             {
                 string game = animation.HasMeta("game_name") ? (string)animation.GetMeta("game_name") : clip;
@@ -104,7 +104,7 @@ public sealed class CharacterMotion
     {
         if (_player == null || Current == null || (CurrentFlags & MotionFlags.Hold) == 0 || _held)
             return;
-        double next = _player.CurrentAnimationPosition + _step / MotionAnimationBuilder.FramesPerSecond;
+        double next = _player.CurrentAnimationPosition + _step / ModelMeta.FramesPerSecond;
         if (next >= _player.CurrentAnimationLength)
         {
             _player.Seek(_player.CurrentAnimationLength, true);
@@ -127,7 +127,7 @@ public sealed class CharacterMotion
         {
             string clip = _clips[_requested];
             // Blend weight goes from 0.1 by 0.2 a game frame: fully in after 4.5 frames.
-            double blend = Current == null ? 0.0 : (1.0f - BlendStart) / BlendSpeed / MotionAnimationBuilder.FramesPerSecond;
+            double blend = Current == null ? 0.0 : (1.0f - BlendStart) / BlendSpeed / ModelMeta.FramesPerSecond;
             _player.Play(clip, blend);
             if (restart || change)
                 _player.Seek(0, true);

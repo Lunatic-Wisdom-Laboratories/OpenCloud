@@ -4,8 +4,7 @@ using System.Collections.Generic;
 namespace OpenCloud.Core.IO;
 
 /// <summary>
-/// One mounted container of game files: a directory, <c>data.zip</c>, a disc image, the retail
-/// <c>DATA.HD4</c>/<c>DATA.DAT</c> pair or a PACK archive. Paths are <see cref="VfsPath"/>
+/// One mounted container of game files, such as a directory or <c>data.zip</c>. Paths are <see cref="VfsPath"/>
 /// normalized. Implementations must be safe for concurrent reads.
 /// </summary>
 public interface IFileSource : IDisposable

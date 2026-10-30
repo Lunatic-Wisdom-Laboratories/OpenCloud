@@ -40,6 +40,22 @@ public static class GameMaterialFactory
         return material;
     }
 
+    /// <summary>
+    /// Brings a material read from a converted model to what <see cref="Create"/> builds: no
+    /// specular term, linear vertex colours, mipmapped filtering, and translucency with a depth
+    /// pre-pass. Colours, textures, culling and lighting mode come from the file.
+    /// </summary>
+    public static void ApplyGameConventions(StandardMaterial3D material)
+    {
+        material.SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled;
+        material.Metallic = 0.0f;
+        material.Roughness = 1.0f;
+        material.VertexColorIsSrgb = false;
+        material.TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps;
+        if (material.Transparency is BaseMaterial3D.TransparencyEnum.Alpha)
+            material.Transparency = BaseMaterial3D.TransparencyEnum.AlphaDepthPrePass;
+    }
+
     /// <summary>Material for geometry whose texture could not be found: visible, but clearly marked.</summary>
     public static StandardMaterial3D CreateMissing(Color diffuse, bool vertexColours)
     {
