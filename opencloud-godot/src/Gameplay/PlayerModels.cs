@@ -76,14 +76,18 @@ public static class PlayerModels
             }
         }
         if (equipment.Hat != null && loader.FindFirst(new[] { equipment.Hat }) is { } hat)
-            AttachToFrame(loader, root, hat, "hat", notes);
+            AttachToFrame(loader, root, rig, hat, "hat", notes);
         return root;
     }
 
     /// <summary><c>SetRef</c>: hangs a part on a named frame of the character's skeleton.</summary>
-    private static void AttachToFrame(ModelLoader loader, Node3D root, string path, string frame, List<string> notes)
+    private static void AttachToFrame(ModelLoader loader, Node3D root, Node3D? rig, string path, string frame, List<string> notes)
     {
-        foreach (var skeleton in FindAll<Skeleton3D>(root))
+        // The rig's own skeleton, the one its motions pose; the pack also holds hidden models
+        // (shadow, LOD) with the same frames that never move.
+        var skeletons = FindAll<Skeleton3D>(root).Where(IsShown)
+            .OrderBy(s => rig != null && s.GetParent() == rig ? 0 : 1);
+        foreach (var skeleton in skeletons)
         {
             int bone = Enumerable.Range(0, skeleton.GetBoneCount())
                 .FirstOrDefault(i => NodeNames.StripAttributes(skeleton.GetBoneName(i)) == frame, -1);
@@ -99,7 +103,7 @@ public static class PlayerModels
                 // The part plays its own first motion, as the game steps a SetRef part: the
                 // hat's motion is what turns it the right way up on the frame.
                 notes.Add($"    part motion: {PlayFirstMotion(part) ?? "none"}");
-                notes.Add($"  {path}: on {frame}");
+                notes.Add($"  {path}: on {frame} of {skeleton.GetParent()?.Name}");
             }
             catch (Exception exception) when (exception is System.IO.InvalidDataException or ArgumentException)
             {
@@ -138,6 +142,16 @@ public static class PlayerModels
             played ??= first;
         }
         return played;
+    }
+
+    private static bool IsShown(Node node)
+    {
+        for (var current = node; current != null; current = current.GetParent())
+        {
+            if (current is Node3D { Visible: false })
+                return false;
+        }
+        return true;
     }
 
     private static IEnumerable<T> FindAll<T>(Node node) where T : Node
