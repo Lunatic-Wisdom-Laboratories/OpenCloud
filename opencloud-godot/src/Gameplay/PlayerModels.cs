@@ -49,7 +49,7 @@ public static class PlayerModels
     public const float HatYawDegrees = 80.0f;
 
     /// <summary>How far the cap is pushed back from the frame, toward the back of the head.</summary>
-    public const float HatBackOffset = 0.5f;
+    public const float HatBackOffset = 0.2f;
 
     public static Equipment ForSlot(int slot) => slot == 1 ? Monica : Max;
 
